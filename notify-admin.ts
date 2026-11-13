@@ -1,6 +1,6 @@
 // POST: a signed-in user whose access is pending asks us to email the admin a one-tap approval link.
 // The caller's Supabase JWT is verified server-side; the email is taken from the token, never from the request body.
-import { ADMIN_EMAIL, SB_URL, SB_SERVICE, configured, rest, sign, esc } from "./_lib";
+import { ADMIN_EMAIL, SB_URL, SB_SERVICE, configured, rest, sign, esc } from "./_lib.js";
 
 // Best-effort per-IP throttle (per warm instance); the hard limit is "one email per request" via notified_at below.
 const hits = new Map<string, number[]>();

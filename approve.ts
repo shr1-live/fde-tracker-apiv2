@@ -1,6 +1,6 @@
 // GET shows a confirm page (so mail scanners that prefetch links cannot approve anyone); POST applies the decision.
 // Both need a valid HMAC signature minted only for this email and action, so no login is needed and nobody can forge one.
-import { configured, verify, rest, esc } from "./_lib";
+import { configured, verify, rest, esc } from "./_lib.js";
 
 const page = (body: string) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FDE Tracker access</title>
 <body style="font-family:system-ui,sans-serif;background:#0E141B;color:#E7ECF2;display:grid;place-items:center;min-height:100vh;margin:0"><main style="max-width:420px;padding:28px;background:#17202A;border:1px solid #2B3744;border-radius:16px;text-align:center">${body}</main>`;
