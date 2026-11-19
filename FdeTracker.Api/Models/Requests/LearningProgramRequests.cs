@@ -155,6 +155,17 @@ public sealed class FeedPostRequest
     [StringLength(500), RegularExpression("^https://\\S+\\z", ErrorMessage = "url must start with https://")] public string? Url { get => _url; set => _url = Text.Opt(value); }
 }
 
+/// <summary>Changes a post. A field left out keeps its value; a field sent as null or empty is cleared.</summary>
+public sealed class FeedPostPatchRequest
+{
+    string? _body, _url;
+
+    [StringLength(2000)] public string? Body { get => _body; set { _body = Text.Opt(value); BodyGiven = true; } }
+    [StringLength(500), RegularExpression("^https://\\S+\\z", ErrorMessage = "url must start with https://")] public string? Url { get => _url; set { _url = Text.Opt(value); UrlGiven = true; } }
+    [JsonIgnore] public bool BodyGiven { get; private set; }
+    [JsonIgnore] public bool UrlGiven { get; private set; }
+}
+
 public sealed class FeedCommentRequest
 {
     string _body = "";

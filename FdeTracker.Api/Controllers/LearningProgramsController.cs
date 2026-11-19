@@ -109,16 +109,15 @@ public sealed class LearningProgramsController(LearningProgramService programs, 
 public sealed class FeedPostsController(FeedPostService feed) : ApiControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] string? before, [FromQuery] int limit = 20)
-    {
-        DateTime? at = null;
-        if (!string.IsNullOrEmpty(before))
-        {
-            if (!DateTimeOffset.TryParse(before, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var b)) throw ApiException.BadRequest("before must be a date and time (ISO 8601)");
-            at = b.UtcDateTime;
-        }
-        return Ok(await feed.Page(CurrentUser, at, limit));
-    }
+    public async Task<IActionResult> List([FromQuery] string? sort, [FromQuery] string? kind, [FromQuery] bool mine = false,
+        [FromQuery] string? q = null, [FromQuery] string? cursor = null, [FromQuery] int limit = 20) =>
+        Ok(await feed.Page(CurrentUser, FeedPostService.ParseQuery(sort, kind, mine, q, cursor), limit));
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> Get(Guid id) => Ok(await feed.Get(CurrentUser, id));
+
+    [HttpPatch("{id:guid}")]
+    public async Task<IActionResult> Edit(Guid id, FeedPostPatchRequest body) => Ok(await feed.Edit(CurrentUser, id, body));
 
     [HttpPost]
     public async Task<IActionResult> Create(FeedPostRequest body) => StatusCode(201, await feed.Create(CurrentUser, body));

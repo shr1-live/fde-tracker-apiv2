@@ -209,7 +209,7 @@ The contract is [`docs/PROGRAMS-V3.md`](docs/PROGRAMS-V3.md); migration `010_pro
 - **Roles per program:** the admin can do everything everywhere and creates programs; a coordinator manages one program (plan, forms, members, everyone's status and reports); a member ticks days and fills their own status. A program you are not in answers 404; an action your role does not allow answers 403.
 - **Status values** are checked against the program's form (unknown keys, required fields, text lengths, numbers 0-1000, ratings 1-5, https links). A daily date must be between 2020-01-01 and tomorrow.
 - **Exports:** `reports/daily.xlsx` (sheets `Summary` and `Status`) and `reports/program.xlsx` (`Readiness Guide` plus one sheet per person), built with ClosedXML.
-- **Feed:** `/api/feed` posts, likes and comments for everyone approved; at most 30 posts and 200 comments per person per UTC day. Authors or the admin delete.
+- **Feed:** `/api/feed` posts, likes and comments for everyone approved; at most 30 posts and 200 comments per person per UTC day. Sorts newest / most liked / most discussed with keyset paging (`cursor`, `next_cursor`), filters by kind (video, link, text), my posts and a text search; one post at `/api/feed/{id}`. Only the author edits (`PATCH`, sets `edited_at`); authors or the admin delete. Migration `011_feed_scale.sql` keeps like and comment counts in stored counters with an index per sort.
 - **Moved:** the old content feed is now `GET /api/content/feed` and the old plans are `/api/plans`, because V3 uses `/api/feed` and `/api/programs`.
 
 ## Reports
@@ -260,7 +260,7 @@ dotnet test        # needs Docker running: starts a throwaway Postgres
 | POST / DELETE | `/api/plans/{slug}/items[/{id}]` | plan owner |
 | PUT | `/api/plans/{slug}/items/{id}/progress` | approved |
 | GET / POST / PATCH | `/api/programs[/{id}]` and everything under it (see `docs/PROGRAMS-V3.md`) | approved; member, coordinator or admin of that program |
-| GET / POST / DELETE | `/api/feed`, `/api/feed/{id}`, `/api/feed/{id}/like`, `/api/feed/{id}/comments`, `/api/feed/comments/{id}` | approved |
+| GET / POST / PATCH / DELETE | `/api/feed?sort=&kind=&mine=&q=&cursor=&limit=`, `/api/feed/{id}`, `/api/feed/{id}/like`, `/api/feed/{id}/comments`, `/api/feed/comments/{id}` | approved |
 | GET | `/api/assistant/usage` | approved |
 | POST | `/api/assistant/analyze` | approved, daily cap |
 | POST | `/api/task-assistant/message`, `/confirm/{id}` | approved, daily cap |

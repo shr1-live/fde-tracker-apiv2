@@ -221,10 +221,19 @@ public sealed class FeedPostView
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)] public string? Body { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)] public string? Url { get; init; }
     public DateTime CreatedAt { get; init; }
+    /// <summary>When the author last changed the post; null if never.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)] public DateTime? EditedAt { get; init; }
     public int LikeCount { get; init; }
     public bool LikedByMe { get; init; }
     public int CommentCount { get; init; }
     public IReadOnlyList<FeedCommentView> Comments { get; init; } = [];
+}
+
+/// <summary>One page of the feed. next_cursor is null on the last page.</summary>
+public sealed class FeedPostPageView
+{
+    public IReadOnlyList<FeedPostView> Items { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)] public string? NextCursor { get; init; }
 }
 
 public sealed class FeedLikeView
@@ -242,9 +251,17 @@ public sealed class FeedPostRow
     public string? Body { get; set; }
     public string? Url { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? EditedAt { get; set; }
     public int LikeCount { get; set; }
     public bool LikedByMe { get; set; }
     public int CommentCount { get; set; }
+}
+
+public sealed class FeedPostEditRow
+{
+    public Guid AuthorId { get; set; }
+    public string? Body { get; set; }
+    public string? Url { get; set; }
 }
 
 public sealed class FeedCommentRow

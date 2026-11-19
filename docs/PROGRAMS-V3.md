@@ -26,7 +26,7 @@ One person can be a member of one program and a coordinator of another. Everyone
 - `lp_form_fields(id uuid pk, program_id, form in ('daily','day'), key text ^[a-z][a-z0-9_]{1,39}$, label 1-80, description <=400 null, type in ('text','longtext','number','rating','url'), required bool, position int, unique(program_id, form, key))`
 - `lp_daily_status(program_id, user_id, on_date date, values jsonb, updated_at, pk(program_id,user_id,on_date))`
 - `lp_day_status(program_id, user_id, day_id, values jsonb, completed bool, completed_at null, updated_at, pk(user_id, day_id))`
-- `feed_posts(id uuid pk, author_id, body text <=2000 null, url text https <=500 null, created_at, check(body or url))`
+- `feed_posts(id uuid pk, author_id, body text <=2000 null, url text https <=500 null, created_at, edited_at null, like_count, comment_count, kind generated video|link|text, check(body or url))`. `011_feed_scale.sql` adds `edited_at`, the counters (kept by triggers on `feed_likes`/`feed_comments` in the same transaction, backfilled), the stored `kind` and one index per sort order and for kind and author.
 - `feed_likes(post_id, user_id, created_at, pk(post_id,user_id))`
 - `feed_comments(id uuid pk, post_id, author_id, body 1-1000, created_at)`
 
@@ -84,7 +84,13 @@ JSON uses snake_case like the existing API. Errors use the existing `{ error }` 
 - Filename: `<program-slug>-daily-<from>-<to>.xlsx` / `<program-slug>-status-report.xlsx`, with the correct content type.
 
 **Feed** (everyone approved)
-- `GET /api/feed?before=<iso>&limit=20` (max 50) returns `[{ id, author: { id, name }, body, url, created_at, like_count, liked_by_me, comment_count, comments: [{ id, author: { id, name }, body, created_at }] }]`. Comments come oldest first, last 20.
+- `GET /api/feed?sort=new|top|discussed&kind=all|video|link|text&mine=true&q=<text>&cursor=<opaque>&limit=20` (limit 1-50, default 20) returns `{ items: Post[], next_cursor: string|null }`. Post is `{ id, author: { id, name }, body, url, created_at, edited_at, like_count, liked_by_me, comment_count, comments: [{ id, author: { id, name }, body, created_at }] }`; comments come oldest first, the last 20.
+  - sort `new` (default) = created_at desc, id desc; `top` = like_count desc, then new; `discussed` = comment_count desc, then new.
+  - Paging is keyset: pass `next_cursor` back as `cursor` with the same sort and filters; it is null on the last page. A cursor made for another sort, or changed by hand, is a 400.
+  - kind `video` = a YouTube link (host youtube.com or youtu.be, any subdomain), `link` = any other link, `text` = no link. `mine=true` = only my posts. `q` (at most 100 characters, blank = none) is a literal, case-insensitive search in the text and the link (`%` and `_` are plain characters).
+  - Bad sort, kind, mine, limit, q or cursor: 400.
+- `GET /api/feed/{id}` returns one Post with up to the last 50 comments (oldest first); 404 if missing.
+- `PATCH /api/feed/{id}` `{ body?, url? }` author only (the admin may delete others' posts but not edit them; 403 for everyone else, 404 if missing). A field left out keeps its value, a field sent as null or empty is cleared; the result must still have text or a link, with the same rules as a new post (https link up to 500, text up to 2000). Sets `edited_at` and returns the Post.
 - `POST /api/feed` `{ body?, url? }`, at least one; limit 30 posts per user per day
 - `DELETE /api/feed/{id}` (author or admin)
 - `POST /api/feed/{id}/like` toggles and returns `{ like_count, liked_by_me }`

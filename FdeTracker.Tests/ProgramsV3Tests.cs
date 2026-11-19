@@ -453,18 +453,19 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Equal(400, await Status("POST", $"/api/feed/{postId}/comments", M2, new { body = new string('a', 1001) }));
         Assert.Equal(404, await Status("POST", $"/api/feed/{Guid.NewGuid()}/comments", M2, new { body = "hello" }));
 
-        var page = (await api.Call("GET", "/api/feed", M2)).Body.AsArray();
+        var page = (await api.Call("GET", "/api/feed", M2)).Body["items"]!.AsArray();
         Assert.Equal((string)linkOnly.Body["id"]!, (string)page[0]!["id"]!); // newest first
         var p = page.Single(x => (string)x!["id"]! == postId)!;
         Assert.True((bool)p["liked_by_me"]!);
         Assert.Equal(1, (int)p["comment_count"]!);
         Assert.Equal("Nice work", (string)p["comments"]![0]!["body"]!);
-        Assert.False((bool)(await api.Call("GET", "/api/feed", M1)).Body.AsArray().Single(x => (string)x!["id"]! == postId)!["liked_by_me"]!);
-        var older = (await api.Call("GET", $"/api/feed?limit=1&before={Uri.EscapeDataString((string)page[0]!["created_at"]!)}", M2)).Body.AsArray();
+        Assert.False((bool)(await api.Call("GET", "/api/feed", M1)).Body["items"]!.AsArray().Single(x => (string)x!["id"]! == postId)!["liked_by_me"]!);
+        var first = (await api.Call("GET", "/api/feed?limit=1", M2)).Body;
+        var older = (await api.Call("GET", $"/api/feed?limit=1&cursor={(string)first["next_cursor"]!}", M2)).Body["items"]!.AsArray();
         Assert.Equal(postId, (string)Assert.Single(older)!["id"]!);
         Assert.Equal(400, await Status("GET", "/api/feed?limit=51", M2));
         Assert.Equal(400, await Status("GET", "/api/feed?limit=0", M2));
-        Assert.Equal(400, await Status("GET", "/api/feed?before=garbage", M2));
+        Assert.Equal(400, await Status("GET", "/api/feed?cursor=garbage", M2));
 
         Assert.Equal(403, await Status("DELETE", $"/api/feed/comments/{commentId}", M1)); // not the author (even as the post's author)
         Assert.Equal(204, await Status("DELETE", $"/api/feed/comments/{commentId}", M2));
@@ -488,7 +489,7 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Contains("30", (string)limited.Body["error"]!);
         Assert.Equal(201, await Status("POST", "/api/feed", M1, new { body = "others are not affected" }));
 
-        var postId = (string)(await api.Call("GET", "/api/feed?limit=1", M1)).Body[0]!["id"]!;
+        var postId = (string)(await api.Call("GET", "/api/feed?limit=1", M1)).Body["items"]![0]!["id"]!;
         await api.Count($"with x as (insert into feed_comments (post_id, author_id, body) select '{postId}', '{M1.Id}', 'c' || g from generate_series(1, 199) g returning 1) select count(*) from x");
         Assert.Equal(201, await Status("POST", $"/api/feed/{postId}/comments", M1, new { body = "number 200" }));
         Assert.Equal(429, await Status("POST", $"/api/feed/{postId}/comments", M1, new { body = "number 201" }));
@@ -497,7 +498,7 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         // Yesterday's posts do not count.
         await api.Count($"with x as (update feed_posts set created_at = now() - interval '2 days' where author_id = '{Co.Id}' returning 1) select count(*) from x");
         Assert.Equal(201, await Status("POST", "/api/feed", Co, new { body = "a new day" }));
-        var page = (await api.Call("GET", "/api/feed?limit=50", M2)).Body.AsArray();
+        var page = (await api.Call("GET", "/api/feed?limit=50", M2)).Body["items"]!.AsArray();
         Assert.Equal(20, page.Single(x => (string)x!["id"]! == postId)!["comments"]!.AsArray().Count); // the last 20 only
         Assert.Equal(201, (int)page.Single(x => (string)x!["id"]! == postId)!["comment_count"]!);
     }
