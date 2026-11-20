@@ -5,12 +5,14 @@ alter table feed_posts add column if not exists edited_at timestamptz null;
 alter table feed_posts add column if not exists like_count int not null default 0;
 alter table feed_posts add column if not exists comment_count int not null default 0;
 
--- video = a YouTube link (youtube.com or youtu.be, any subdomain), link = any other link, text = no link.
--- The host must be followed by a port, path, query, fragment or the end, so "https://youtube.com@evil.example" is a plain link.
+-- video = a link to ONE YouTube video (the same rule the web app uses to show a player): youtu.be/<id>, youtube.com/watch?v=<id>,
+-- or youtube.com/shorts|embed|live/<id>, with an 11-character id; any subdomain of youtube.com. A channel or playlist page is a link.
+-- The host must be followed by a port or a path, so "https://youtube.com@evil.example" or "youtube.com.evil.example" is a plain link.
 alter table feed_posts add column if not exists kind text generated always as (
   case
     when url is null then 'text'
-    when url ~* '^https://([a-z0-9-]+\.)*(youtube\.com|youtu\.be)(:[0-9]+)?([/?#]|$)' then 'video'
+    when url ~* '^https://([a-z0-9-]+\.)*youtube\.com(:[0-9]+)?/(watch\?([^#]*&)?v=[a-z0-9_-]{11}([&#]|$)|(shorts|embed|live)/[a-z0-9_-]{11}([/?#]|$))' then 'video'
+    when url ~* '^https://youtu\.be(:[0-9]+)?/[a-z0-9_-]{11}([/?#]|$)' then 'video'
     else 'link'
   end) stored;
 

@@ -68,12 +68,12 @@ public sealed class FeedScaleTests(ApiFixture api) : IClassFixture<ApiFixture>
         var urls = new (string? Url, string Kind)[]
         {
             (null, "text"),
-            ("https://www.youtube.com/watch?v=abc", "video"),
-            ("https://youtu.be/xyz", "video"),
+            ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "video"),
+            ("https://youtu.be/dQw4w9WgXcQ?t=30", "video"),
             ("https://example.com/read", "link"),
-            ("https://youtube.com.evil.example/watch", "link"),
-            ("https://notyoutube.com/x", "link"),
-            ("https://m.YouTube.com/shorts/1", "video"),
+            ("https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ", "link"),
+            ("https://www.youtube.com/@AndrejKarpathy", "link"),   // a channel page is not one video
+            ("https://m.YouTube.com/shorts/aBcDeFgHiJk", "video"),
         };
         for (var i = 0; i < 25; i++)
         {
@@ -275,7 +275,7 @@ public sealed class FeedScaleTests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Equal((int)before["comment_count"]!, (int)edited.Body["comment_count"]!);
 
         // Adding a link turns a text post into a link post; then the text can go.
-        edited = await api.Call("PATCH", $"/api/feed/{id}", author, new { url = "https://youtu.be/new" });
+        edited = await api.Call("PATCH", $"/api/feed/{id}", author, new { url = "https://youtu.be/dQw4w9WgXcQ" });
         Assert.Equal(200, edited.Status);
         Assert.Equal("Better words", (string)edited.Body["body"]!);
         Assert.Contains(id, IdsOf(await All("kind=video", A, 50)));
@@ -283,7 +283,7 @@ public sealed class FeedScaleTests(ApiFixture api) : IClassFixture<ApiFixture>
         edited = await api.Call("PATCH", $"/api/feed/{id}", author, new { body = "" });
         Assert.Equal(200, edited.Status);
         Assert.Null(edited.Body["body"]);
-        Assert.Equal("https://youtu.be/new", (string)edited.Body["url"]!);
+        Assert.Equal("https://youtu.be/dQw4w9WgXcQ", (string)edited.Body["url"]!);
         Assert.Equal(400, await Status("PATCH", $"/api/feed/{id}", author, new { url = (string?)null }));
         Assert.Equal(200, await Status("PATCH", $"/api/feed/{id}", author, new { body = "Back to text", url = (string?)null }));
         Assert.Contains(id, IdsOf(await All("kind=text", A, 50)));
