@@ -65,6 +65,7 @@ public sealed class SecurityMiddleware(RequestDelegate next, IHostEnvironment en
         !HttpMethods.IsPost(request.Method) ? MaxBody
         : UploadRoute.IsMatch(request.Path.Value ?? "") ? UploadMaxBody
         : request.Path.Equals("/api/lab/runs", StringComparison.OrdinalIgnoreCase) ? LabRunMaxBody
+        : request.Path.Equals("/api/admin/demo-data", StringComparison.OrdinalIgnoreCase) ? UploadMaxBody // two small .xlsx sheets
         : MaxBody;
 
     static bool IsDocsPage(PathString path) =>

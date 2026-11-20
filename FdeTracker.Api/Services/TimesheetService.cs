@@ -108,6 +108,7 @@ public sealed class TimesheetService(Db db, LearningProgramRepository programs, 
             insert into lp_time_weeks (program_id, user_id, week_start, submitted_at, updated_at) values (@programId, @userId, @week::date, case when @submit then now() end, now())
             on conflict (program_id, user_id, week_start) do update set submitted_at = case when @submit then now() end, updated_at = now()
             """, new { programId, userId = user.Id, week = Iso(monday), submit = b.Submit });
+        if (b.Submit) await notifications.WeekSubmitted(s, programId, user.Id, Iso(monday)); // coordinators and the admin hear about it
         foreach (var d in perDay.Where(x => x.Value > 0).Select(x => x.Key))
             await notifications.SettleDailyMissed(s, user.Id, programId, Iso(d)); // hours on a day count as that day's status
         return await Load(s, programId, user.Id, monday);

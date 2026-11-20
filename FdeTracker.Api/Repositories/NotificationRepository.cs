@@ -77,12 +77,29 @@ public sealed class NotificationRepository
                      'You have not filled in your ' || program_name || ' daily status for ' || to_char(@onDate::date, 'Dy DD Mon') || '.',
                      '/p/' || program_id || '/daily?date=' || @onDate
               from missed
-              on conflict (user_id, kind, program_id, on_date) do nothing
+              on conflict (user_id, kind, program_id, on_date, (coalesce(subject_user_id, '00000000-0000-0000-0000-000000000000'::uuid))) do nothing
               returning id, user_id, program_id, link
             )
             select a.id, a.user_id, u.email, {LearningProgramRepository.NameOf("u")} as name, p.name as program_name, @onDate as on_date, a.link
             from added a join app_users u on u.id = a.user_id join lp_programs p on p.id = a.program_id
             """, new { onDate, onlyUserId });
+
+    /// <summary>Tells the program's coordinators and every admin that someone submitted their week (a resubmission shows as new).</summary>
+    public Task<int> WeekSubmitted(Session s, Guid programId, Guid submitter, string week) =>
+        s.Exec("""
+            insert into notifications (user_id, kind, program_id, on_date, subject_user_id, title, body, link)
+            select r.user_id, 'week_submitted', p.id, @week::date, @submitter,
+                   left(who.name || ' submitted their week in ' || p.name, 200),
+                   left(who.name || ' submitted the ' || p.name || ' daily log for the week of ' || to_char(@week::date, 'DD Mon') || '.', 1000),
+                   '/p/' || p.id || '/daily?person=' || @submitter || '&date=' || @week
+            from lp_programs p
+            cross join (select split_part(coalesce(nullif(btrim(display_name), ''), email), '@', 1) as name from app_users where id = @submitter) who
+            join (select user_id from lp_members where program_id = @programId and role = 'coordinator'
+                  union select id from app_users where role = 'admin') r on r.user_id <> @submitter
+            where p.id = @programId
+            on conflict (user_id, kind, program_id, on_date, (coalesce(subject_user_id, '00000000-0000-0000-0000-000000000000'::uuid)))
+            do update set created_at = now(), read_at = null, title = excluded.title, body = excluded.body
+            """, new { programId, submitter, week });
 
     public Task<int> MarkEmailed(Session s, Guid id) => s.Exec("update notifications set emailed_at = now() where id = @id", new { id });
 }
