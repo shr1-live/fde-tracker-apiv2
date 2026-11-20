@@ -1,0 +1,32 @@
+[
+  {
+    "name": "qwen2.5:3b",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "model": "qwen2.5:3b",
+    "price_in_per_million": 0,
+    "price_out_per_million": 0
+  },
+  {
+    "name": "qwen2.5:1.5b",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "model": "qwen2.5:1.5b",
+    "price_in_per_million": 0,
+    "price_out_per_million": 0
+  },
+  {
+    "name": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "model": "gemini-2.5-flash",
+    "api_key_env": "GEMINI_API_KEY",
+    "enabled": false,
+    "price_in_per_million": 0,
+    "price_out_per_million": 0
+  },
+  {
+    "name": "claude",
+    "provider": "anthropic",
+    "model": "claude-haiku-5-5",
+    "api_key_env": "ANTHROPIC_API_KEY",
+    "enabled": false
+  }
+]

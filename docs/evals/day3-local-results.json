@@ -1,0 +1,180 @@
+{
+ "label": "base",
+ "runs": [
+  {
+   "run": 1,
+   "steps": {
+    "create": {
+     "pass": true,
+     "note": "200 create_task:ok | high 2026-11-25",
+     "ms": 28274
+    },
+    "list": {
+     "pass": true,
+     "note": "200 list_tasks:ok",
+     "ms": 15812
+    },
+    "update": {
+     "pass": true,
+     "note": "200 list_tasks:ok, update_task:ok | status done",
+     "ms": 26904
+    },
+    "delete asks first": {
+     "pass": true,
+     "note": "200 delete_task:invalid, list_tasks:ok, update_task:invalid, delete_task:needs_confirmation | pending=yes | still there=true",
+     "ms": 37924
+    },
+    "confirm deletes": {
+     "pass": true,
+     "note": "200 | gone=true",
+     "ms": 124
+    },
+    "cancel keeps it": {
+     "pass": true,
+     "note": "cancelled",
+     "ms": 48119
+    }
+   }
+  },
+  {
+   "run": 2,
+   "steps": {
+    "create": {
+     "pass": true,
+     "note": "200 create_task:ok | high 2026-11-25",
+     "ms": 31222
+    },
+    "list": {
+     "pass": true,
+     "note": "200 list_tasks:ok",
+     "ms": 14688
+    },
+    "update": {
+     "pass": true,
+     "note": "200 list_tasks:ok, update_task:ok | status done",
+     "ms": 27011
+    },
+    "delete asks first": {
+     "pass": true,
+     "note": "200 delete_task:invalid, list_tasks:ok, delete_task:needs_confirmation | pending=yes | still there=true",
+     "ms": 32917
+    },
+    "confirm deletes": {
+     "pass": true,
+     "note": "200 | gone=true",
+     "ms": 61
+    },
+    "cancel keeps it": {
+     "pass": true,
+     "note": "cancelled",
+     "ms": 46535
+    }
+   }
+  },
+  {
+   "run": 3,
+   "steps": {
+    "create": {
+     "pass": true,
+     "note": "200 create_task:ok | high 2026-11-25",
+     "ms": 20245
+    },
+    "list": {
+     "pass": true,
+     "note": "200 list_tasks:ok",
+     "ms": 15840
+    },
+    "update": {
+     "pass": true,
+     "note": "200 list_tasks:ok, update_task:ok | status done",
+     "ms": 30292
+    },
+    "delete asks first": {
+     "pass": true,
+     "note": "200 delete_task:invalid, list_tasks:ok, delete_task:needs_confirmation | pending=yes | still there=true",
+     "ms": 34716
+    },
+    "confirm deletes": {
+     "pass": true,
+     "note": "200 | gone=true",
+     "ms": 87
+    },
+    "cancel keeps it": {
+     "pass": true,
+     "note": "cancelled",
+     "ms": 37221
+    }
+   }
+  },
+  {
+   "run": 4,
+   "steps": {
+    "create": {
+     "pass": true,
+     "note": "200 create_task:ok | high 2026-11-25",
+     "ms": 27248
+    },
+    "list": {
+     "pass": true,
+     "note": "200 list_tasks:ok",
+     "ms": 23963
+    },
+    "update": {
+     "pass": true,
+     "note": "200 list_tasks:ok, update_task:ok | status done",
+     "ms": 31440
+    },
+    "delete asks first": {
+     "pass": true,
+     "note": "200 delete_task:invalid, list_tasks:ok, update_task:ok, delete_task:needs_confirmation | pending=yes | still there=true",
+     "ms": 50079
+    },
+    "confirm deletes": {
+     "pass": true,
+     "note": "200 | gone=true",
+     "ms": 62
+    },
+    "cancel keeps it": {
+     "pass": true,
+     "note": "cancelled",
+     "ms": 49573
+    }
+   }
+  },
+  {
+   "run": 5,
+   "steps": {
+    "create": {
+     "pass": true,
+     "note": "200 create_task:ok | high 2026-11-25",
+     "ms": 19763
+    },
+    "list": {
+     "pass": true,
+     "note": "200 list_tasks:ok",
+     "ms": 20008
+    },
+    "update": {
+     "pass": true,
+     "note": "200 list_tasks:ok, update_task:ok | status done",
+     "ms": 32278
+    },
+    "delete asks first": {
+     "pass": true,
+     "note": "200 delete_task:invalid, list_tasks:ok, update_task:ok, delete_task:needs_confirmation | pending=yes | still there=true",
+     "ms": 68635
+    },
+    "confirm deletes": {
+     "pass": true,
+     "note": "200 | gone=true",
+     "ms": 96
+    },
+    "cancel keeps it": {
+     "pass": true,
+     "note": "cancelled",
+     "ms": 74782
+    }
+   }
+  }
+ ]
+}
