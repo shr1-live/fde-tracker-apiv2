@@ -1,0 +1,25 @@
+[
+  {
+    "name": "local-small",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "model": "MODEL-TAG-FROM-OLLAMA-LIST"
+  },
+  {
+    "name": "claude",
+    "provider": "anthropic",
+    "model": "claude-haiku-5-5",
+    "api_key_env": "ANTHROPIC_API_KEY"
+  },
+  {
+    "name": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "model": "MODEL-NAME-FROM-PROVIDER-DOCS",
+    "api_key_env": "GEMINI_API_KEY"
+  },
+  {
+    "name": "groq",
+    "base_url": "https://api.groq.com/openai/v1",
+    "model": "MODEL-NAME-FROM-PROVIDER-DOCS",
+    "api_key_env": "GROQ_API_KEY"
+  }
+]
