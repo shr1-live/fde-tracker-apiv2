@@ -1,0 +1,19 @@
+# Secret scanning rules: gitleaks' default rules, plus one allow-list entry.
+title = "fde-tracker gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public values that are meant to be in the repo"
+# web/.env.production holds only public build settings: the API address, the Supabase URL and the Supabase
+# *publishable* key, which browsers receive anyway (row-level security protects the data). A service_role key
+# or any other secret must never go there; the Claude Code hook in .claude/hooks refuses it.
+# Only the publishable key format is allowed (anywhere): it is public by design. No path is allow-listed, so a
+# real secret added to web/.env.production is still caught.
+# The API tests also use obviously fake Gemini keys ("AIzaSyOWNKEY_0123456789abcdef...") to prove keys are never echoed.
+regexes = [
+  '''sb_publishable_[A-Za-z0-9_-]+''',
+  '''AIzaSy[A-Z]+_0123456789abcdefghijklmnopq?''',
+]
+regexTarget = "match"

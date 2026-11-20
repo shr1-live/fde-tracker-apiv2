@@ -1,3 +1,19 @@
+# FDE Tracker: API (Programs V3 backend)
+
+Production backend of the Programs V3 product. The frontend lives in the sibling repository [`fde-tracker-appv2`](https://github.com/shr1-live/fde-tracker-appv2). The contract between them is [docs/PROGRAMS-V3.md](docs/PROGRAMS-V3.md).
+
+| | |
+|---|---|
+| Runs on | Render (Docker), service `fde-tracker-v3-api`, created from [`render.yaml`](render.yaml) |
+| Database | Postgres (Supabase); migrations in `migrations/` run at start-up |
+| Auth | Supabase sign-in token (JWT), invite-only access |
+| Docs | [docs/](docs/) (product, architecture, standards, AI development, QA, security, delivery, decisions) and [AGENTS.md](AGENTS.md) |
+| Working rules | New branch from `develop`, pull request into `develop`, `develop` into `main` deploys. CI runs on every pull request. |
+
+The rest of this file is the full API readme (it still describes the older training endpoints that this API also serves).
+
+---
+
 # FDE Tracker API
 
 Backend for the FDE Learning Tracker. **ASP.NET Core on .NET 10** (MVC-style Web API), Postgres (SQL migrations in `migrations/`). Deployed on Render as a Docker service; the frontend is a separate repo on Vercel.

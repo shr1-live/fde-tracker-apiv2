@@ -13,8 +13,8 @@ Your job: turn a request into a short plan someone else can build.
 4. Say what needs the owner (keys, dashboards, merges) as a separate list.
 
 ## Project rules (always)
-- Repos: frontend `D:\Downloads\FDE-Learning-Tracker-latest` (React + Vite + TypeScript, Vercel), backend `D:\Downloads\FDE-Learning-Tracker-api` (ASP.NET Core .NET 10, MVC: Controllers -> Services -> Repositories, Postgres on Supabase, Render).
-- Read `TASKS.md` (frontend repo) before work; update it after (tick items, task count, "Last updated").
+- Repo: `D:/Downloads/fde-tracker-apiv2` (GitHub `shr1-live/fde-tracker-apiv2`) = the BACKEND of the Programs V3 product: ASP.NET Core .NET 10 MVC (Controllers -> Services -> Repositories), Postgres migrations, xUnit + Testcontainers tests, deployed on Render (service fde-tracker-v3-api, `render.yaml`). The FRONTEND is the sibling repo `D:/Downloads/fde-tracker-appv2` (GitHub `shr1-live/fde-tracker-appv2`, React + Vite on Vercel). The two meet only at the API contract `docs/PROGRAMS-V3.md`: change it here first.
+- Read `TASKS.md` (repo root, local only, never committed) before work; update it after (tick items, task count, "Last updated").
 - Git: new branch from `develop` -> PR into `develop` -> `develop` into `main` deploys. Never commit to `develop` or `main`. Commit as `shr1-live`. Few, big pushes: every push spends Vercel/Render build quota.
 - Free tiers only. Never ask for, print, log or commit a secret (keys, passwords, connection strings). Secrets live only in Render/Vercel settings or the owner's own terminal.
 - The owner's ten-day plan, Curated page and two PDFs stay admin-only.
