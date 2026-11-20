@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: fde-tracker-v3-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ALLOWED_DOMAIN
+        value: fiftyfivetech.io
+      - key: ADMIN_EMAIL
+        value: shivanshu.rai@fiftyfivetech.io
+      - key: FREE_SEATS
+        value: "3"
+      # The model. Only the key and the model name are secrets-or-choices, so they are set in the dashboard; the rest have safe defaults here.
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: LLM_MAX_TOKENS
+        value: "3000"
+      - key: LLM_DAILY_CAP
+        value: "20"
+      # "model" shows the model's own summary text; "code" builds it in our code (safer against text planted in a profile). The owner decides.
+      - key: ASSISTANT_SUMMARY
+        value: model
+      # Set these in the Render dashboard (sync: false keeps them out of git):
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://fde-tracker-green.vercel.app

@@ -1,0 +1,66 @@
+# Checks every push and pull request to develop and main: the API builds and its tests pass, no high/critical
+# vulnerable package ships, and no secret is committed.
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-dotnet@v4.3.1
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet build FdeTracker.sln --configuration Release
+      # The tests start a throwaway Postgres with Testcontainers; ubuntu-latest has Docker.
+      - run: dotnet test FdeTracker.Tests --configuration Release --no-build --logger "console;verbosity=normal"
+
+  vulnerable-packages:
+    name: Vulnerable packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-dotnet@v4.3.1
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore FdeTracker.sln
+      - name: Fail on high or critical advisories (direct and transitive)
+        run: |
+          dotnet list FdeTracker.sln package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          if grep -Eq '\b(High|Critical)\b' vulnerable.txt; then
+            echo "::error::A NuGet package with a high or critical advisory is in use. Update it (see the list above)."
+            exit 1
+          fi
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: "8.24.3"
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0 # scan the whole history, not only the last commit
+      - name: Install gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tgz
+          tar -xzf gitleaks.tgz gitleaks
+          ./gitleaks version
+      - name: Scan
+        run: ./gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --verbose
