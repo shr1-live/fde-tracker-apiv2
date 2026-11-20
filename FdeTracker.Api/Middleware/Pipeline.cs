@@ -67,6 +67,9 @@ public sealed class SecurityMiddleware(RequestDelegate next, IHostEnvironment en
         : request.Path.Equals("/api/lab/runs", StringComparison.OrdinalIgnoreCase) ? LabRunMaxBody
         : MaxBody;
 
+    static bool IsDocsPage(PathString path) =>
+        path == "/" || path.StartsWithSegments("/scalar") || path.StartsWithSegments("/openapi");
+
     public Task Invoke(HttpContext ctx)
     {
         var limit = LimitFor(ctx.Request);
@@ -74,8 +77,10 @@ public sealed class SecurityMiddleware(RequestDelegate next, IHostEnvironment en
         h["X-Content-Type-Options"] = "nosniff";
         h["X-Frame-Options"] = "DENY";
         h["Referrer-Policy"] = "no-referrer";
-        if (!env.IsDevelopment()) h["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"; // the dev docs page needs scripts
-        h["Strict-Transport-Security"] = "max-age=15552000; includeSubDomains";
+        // JSON only: nothing may load or frame it. The one exception is the Development-only docs page, which needs its scripts.
+        if (!(env.IsDevelopment() && IsDocsPage(ctx.Request.Path))) h["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+        if (!env.IsDevelopment()) h["Strict-Transport-Security"] = "max-age=15552000; includeSubDomains"; // local http stays usable
+        h["Cross-Origin-Opener-Policy"] = "same-origin";
         h["Cross-Origin-Resource-Policy"] = "same-origin";
         if (ctx.Request.ContentLength > limit) return ErrorBody.Write(ctx, 413, "Request too large");
         if (ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } f) f.MaxRequestBodySize = limit;
@@ -91,6 +96,12 @@ public sealed class CurrentUserMiddleware(RequestDelegate next)
         var needsUser = ctx.GetEndpoint()?.Metadata.GetMetadata<IAuthorizeData>() is not null && ctx.User.Identity?.IsAuthenticated == true;
         if (!needsUser) { await next(ctx); return; }
 
+        // Supabase marks an address it has not confirmed with email_verified=false; such a token never signs anyone in.
+        if (string.Equals(ctx.User.FindFirstValue("email_verified"), "false", StringComparison.OrdinalIgnoreCase))
+        {
+            await ErrorBody.Write(ctx, 403, "Confirm your email address first");
+            return;
+        }
         var email = (ctx.User.FindFirstValue("email") ?? "").ToLowerInvariant();
         if (!Guid.TryParseExact(ctx.User.FindFirstValue("sub"), "D", out var id) || !email.EndsWith("@" + options.AllowedDomain, StringComparison.Ordinal))
         {

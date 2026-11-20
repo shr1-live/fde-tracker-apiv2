@@ -95,10 +95,10 @@ public class ApiFixture : IAsyncLifetime
         await _pg.DisposeAsync();
     }
 
-    public static string Token(TestUser u)
+    public static string Token(TestUser u, params Claim[] extra)
     {
         var creds = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Secret)), SecurityAlgorithms.HmacSha256);
-        var jwt = new JwtSecurityToken(Issuer, "authenticated", [new Claim("sub", u.Id.ToString()), new Claim("email", u.Email)], expires: DateTime.UtcNow.AddHours(1), signingCredentials: creds);
+        var jwt = new JwtSecurityToken(Issuer, "authenticated", [new Claim("sub", u.Id.ToString()), new Claim("email", u.Email), .. extra], expires: DateTime.UtcNow.AddHours(1), signingCredentials: creds);
         return new JwtSecurityTokenHandler().WriteToken(jwt);
     }
 

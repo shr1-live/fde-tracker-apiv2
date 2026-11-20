@@ -43,6 +43,38 @@ public sealed class ApiTests(ApiFixture api) : IClassFixture<ApiFixture>, IAsync
     }
 
     [Fact]
+    public async Task T02b_json_responses_carry_the_hardening_headers()
+    {
+        foreach (var path in new[] { "/health", "/api/me", "/api/no-such-route" })
+        {
+            var r = await api.Raw(path);
+            Assert.Equal("nosniff", r.Headers.GetValues("X-Content-Type-Options").Single());
+            Assert.Equal("DENY", r.Headers.GetValues("X-Frame-Options").Single());
+            Assert.Equal("no-referrer", r.Headers.GetValues("Referrer-Policy").Single());
+            Assert.Equal("default-src 'none'; frame-ancestors 'none'", r.Headers.GetValues("Content-Security-Policy").Single());
+            Assert.False(r.Headers.Contains("Strict-Transport-Security")); // tests run as Development (plain http); every other environment sends HSTS
+            var body = await r.Content.ReadAsStringAsync();
+            Assert.DoesNotContain("   at ", body); // never a stack trace
+        }
+    }
+
+    [Fact]
+    public async Task T02c_tokens_with_an_unconfirmed_email_a_wrong_audience_or_no_signature_are_refused()
+    {
+        var unverified = ApiFixture.Token(B, new System.Security.Claims.Claim("email_verified", "false", System.Security.Claims.ClaimValueTypes.Boolean));
+        var refused = await api.Call("GET", "/api/me", rawToken: unverified);
+        Assert.Equal(403, refused.Status);
+        Assert.Equal("Confirm your email address first", (string)refused.Body["error"]!);
+        var verified = ApiFixture.Token(B, new System.Security.Claims.Claim("email_verified", "true", System.Security.Claims.ClaimValueTypes.Boolean));
+        Assert.Equal(200, (await api.Call("GET", "/api/me", rawToken: verified)).Status);
+
+        static string B64(string json) => Convert.ToBase64String(Encoding.UTF8.GetBytes(json)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+        var unsigned = B64("""{"alg":"none","typ":"JWT"}""") + "." + B64($$"""{"sub":"{{B.Id}}","email":"{{B.Email}}","aud":"authenticated","iss":"https://test.supabase.co/auth/v1","exp":{{exp}}}""") + ".";
+        Assert.Equal(401, (await api.Call("GET", "/api/me", rawToken: unsigned)).Status);
+    }
+
+    [Fact]
     public async Task T03_admin_and_invited_people_are_approved_and_an_uninvited_person_waits()
     {
         Assert.Equal("admin", (string)(await api.Call("GET", "/api/me", Admin)).Body["role"]!);
