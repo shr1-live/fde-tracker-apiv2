@@ -74,6 +74,7 @@ builder.Services.AddSingleton<ProgramStatusService>();
 builder.Services.AddSingleton<FeedPostService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<TimesheetService>();
+builder.Services.AddSingleton<DemoService>();
 builder.Services.AddHttpClient("email", c => c.Timeout = TimeSpan.FromSeconds(15));
 if (options.RemindersEnabled) builder.Services.AddHostedService<ReminderJob>();
 
