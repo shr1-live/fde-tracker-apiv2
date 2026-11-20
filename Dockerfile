@@ -1,5 +1,5 @@
 # Build with the .NET 10 SDK, run on the slim ASP.NET runtime.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 COPY FdeTracker.Api/FdeTracker.Api.csproj FdeTracker.Api/
 RUN dotnet restore FdeTracker.Api
