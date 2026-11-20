@@ -1,8 +1,8 @@
 # Architecture
 
-![Architecture: runtime and AI-assisted delivery](architecture.png)
+![Architecture: web app, API, database, sign-in, reminders and delivery](architecture.svg)
 
-The editable diagram is [architecture.excalidraw](architecture.excalidraw): open https://excalidraw.com, then Menu > Open, and pick this file.
+The current diagram is [architecture.svg](architecture.svg) (updated 2026-11-20). The older hackathon diagram is kept as [architecture.png](architecture.png) / [architecture.excalidraw](architecture.excalidraw) (open https://excalidraw.com, then Menu > Open) for history.
 
 ## Repositories
 
@@ -24,6 +24,8 @@ The two talk only through the API contract. Change the contract in the backend r
 | Database | Postgres | Supabase (free) |
 | Sign-in | Supabase Auth (magic link, JWT) | Supabase |
 | Excel | ClosedXML | Inside the API |
+| Reminders | A background job in the API (every 5 minutes, acts at 10:00 IST) | Inside the API |
+| Email (optional) | Resend HTTP API, free tier | Only when `RESEND_API_KEY` and `EMAIL_FROM` are set |
 
 ## Request flow
 
@@ -37,7 +39,7 @@ The web app never talks to the database directly. The Supabase key in the web ap
 
 ## Data model (V3 tables)
 
-Created by migrations `010_programs_v3.sql` and `011_feed_scale.sql`. `app_users` comes from `001_init.sql`. Migrations 002-009 belong to the older tracker features and are kept.
+Created by migrations `010_programs_v3.sql`, `011_feed_scale.sql`, `012_notifications.sql`, `013_feed_per_program.sql` and `014_timesheets.sql`. `app_users` comes from `001_init.sql`. Migrations 002-009 belong to the older tracker features and are kept.
 
 | Table | Holds |
 |---|---|
@@ -52,6 +54,19 @@ Created by migrations `010_programs_v3.sql` and `011_feed_scale.sql`. `app_users
 | `feed_posts` | Posts: text and/or https link, stored `kind` (video, link, text), like and comment counters, `edited_at` |
 | `feed_likes` | One row per like |
 | `feed_comments` | Comments |
+| `lp_time_tasks` | Timesheet rows: a person's own tasks for one week of one program |
+| `lp_time_cells` | Hours (minutes) and a short note per task per day |
+| `lp_time_weeks` | Per person, program and week: submitted or draft |
+| `notifications` | In-app notifications; the first kind is `daily_missed`, unique per person, program and day |
+
+`feed_posts.program_id` ties every post to one program: only that program's people (and the admin) can see, like or comment on it.
+
+## Daily status reminders
+
+1. A job in the API wakes every 5 minutes. On working days from 10:00 IST it looks at the previous working day (Monday looks at Friday).
+2. For every member or coordinator of a program that had started, who was already in it that day: no daily status **and** no timesheet hours that day means one `daily_missed` reminder for that program. Example: on Thu 19 Nov someone logged DevOps but not FDE, so on Fri 20 Nov at 10:00 they get a reminder for FDE only.
+3. The reminder shows in the bell, as an alert card when the app opens, as a desktop alert if allowed, and by email if email is set up. Its link opens the missed day.
+4. Logging the day (timesheet hours or the old form) clears the reminder. Reminders are unique, so a restart, a second instance or the catch-up when someone opens the app never sends twice; the catch-up also covers a free server that slept through 10:00.
 
 Form values are JSON, but the server checks every key and type against `lp_form_fields` before saving (see the contract in [PROGRAMS-V3.md in the backend repository](https://github.com/shr1-live/fde-tracker-apiv2/blob/main/docs/PROGRAMS-V3.md)).
 
@@ -59,6 +74,7 @@ Form values are JSON, but the server checks every key and type against `lp_form_
 
 - **Invite-only.** The admin email is always admin. Anyone else is approved only when an invite exists for their email, or they were approved before V3. Unknown emails stay `pending`.
 - **An invite never lifts a rejection.** If the admin rejected someone, a coordinator's invite adds them to the program but they stay locked out.
+- **View as** (top bar) lets the admin see the app as a coordinator or member, and a coordinator as a member. It only changes the screens; the API still uses the real role.
 - **Per-program roles are checked in services**, not only in the web app. A member asking for another person's status gets 403. A program they are not in gives 404 or 403.
 - The admin can delete any post but can only edit their own.
 
@@ -77,7 +93,8 @@ Form values are JSON, but the server checks every key and type against `lp_form_
 ## Limitations
 
 - Render free tier sleeps when idle; the first call is slow.
-- No emails or notifications.
+- Email reminders need a Resend key and a verified sending domain; without them reminders are in-app only.
+- No automatic sync to the SharePoint training sheets yet (needs a Microsoft 365 app registration); Reports > Download Excel gives the same layout.
 - Feed posts take links only, no uploads.
 - Daily reports cover at most 120 days per request.
 - The main web bundle is about 133 kB gzipped; pages are lazy-loaded but the Supabase client is in the main bundle.
