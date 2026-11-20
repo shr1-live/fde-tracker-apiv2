@@ -42,6 +42,7 @@ builder.Services.AddSingleton<LabRunRepository>();
 builder.Services.AddSingleton<ReportRepository>();
 builder.Services.AddSingleton<LearningProgramRepository>();
 builder.Services.AddSingleton<FeedPostRepository>();
+builder.Services.AddSingleton<NotificationRepository>();
 builder.Services.AddSingleton<TaskTools>();
 builder.Services.AddSingleton<PromptLibrary>();
 builder.Services.AddSingleton<AnalysisPipeline>();
@@ -71,6 +72,10 @@ builder.Services.AddSingleton<ReportService>();
 builder.Services.AddSingleton<LearningProgramService>();
 builder.Services.AddSingleton<ProgramStatusService>();
 builder.Services.AddSingleton<FeedPostService>();
+builder.Services.AddSingleton<NotificationService>();
+builder.Services.AddSingleton<TimesheetService>();
+builder.Services.AddHttpClient("email", c => c.Timeout = TimeSpan.FromSeconds(15));
+if (options.RemindersEnabled) builder.Services.AddHostedService<ReminderJob>();
 
 // ---- controllers and JSON (snake_case on the wire, unknown fields refused)
 builder.Services.AddControllers()

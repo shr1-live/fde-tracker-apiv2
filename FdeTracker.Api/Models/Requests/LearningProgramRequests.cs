@@ -153,6 +153,8 @@ public sealed class FeedPostRequest
 
     [StringLength(2000)] public string? Body { get => _body; set => _body = Text.Opt(value); }
     [StringLength(500), RegularExpression("^https://\\S+\\z", ErrorMessage = "url must start with https://")] public string? Url { get => _url; set => _url = Text.Opt(value); }
+    /// <summary>The program the post belongs to. The web app always sends it; you must be in that program.</summary>
+    public Guid? ProgramId { get; set; }
 }
 
 /// <summary>Changes a post. A field left out keeps its value; a field sent as null or empty is cleared.</summary>

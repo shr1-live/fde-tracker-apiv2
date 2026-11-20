@@ -110,8 +110,8 @@ public sealed class FeedPostsController(FeedPostService feed) : ApiControllerBas
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] string? sort, [FromQuery] string? kind, [FromQuery] bool mine = false,
-        [FromQuery] string? q = null, [FromQuery] string? cursor = null, [FromQuery] int limit = 20) =>
-        Ok(await feed.Page(CurrentUser, FeedPostService.ParseQuery(sort, kind, mine, q, cursor), limit));
+        [FromQuery] string? q = null, [FromQuery] string? cursor = null, [FromQuery] int limit = 20, [FromQuery(Name = "program_id")] Guid? programId = null) =>
+        Ok(await feed.Page(CurrentUser, programId, FeedPostService.ParseQuery(sort, kind, mine, q, cursor), limit));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id) => Ok(await feed.Get(CurrentUser, id));

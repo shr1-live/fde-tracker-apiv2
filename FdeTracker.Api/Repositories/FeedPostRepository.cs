@@ -15,11 +15,15 @@ public sealed class FeedPostRepository
         exists (select 1 from feed_likes l where l.post_id = p.id and l.user_id = @me) as liked_by_me
         """;
 
+    /// <summary>Who may see a post: the admin, or a member of the post's program. Needs @me and @admin.</summary>
+    const string Visible = "(@admin or p.program_id is null or exists (select 1 from lp_members vm where vm.program_id = p.program_id and vm.user_id = @me))";
+
     /// <summary>One page of the feed in the given order, after the cursor (if any). Reads one row more than asked so the caller knows if there is a next page.
     /// The SQL is built only from fixed fragments; every value is a parameter.</summary>
-    public Task<List<FeedPostRow>> Page(Session s, Guid me, FeedPostQuery q, int take)
+    public Task<List<FeedPostRow>> Page(Session s, Guid me, bool admin, Guid? programId, FeedPostQuery q, int take)
     {
-        var where = new List<string>();
+        var where = new List<string> { Visible };
+        if (programId is not null) where.Add("p.program_id = @programId");
         if (q.Kind is not null) where.Add("p.kind = @kind");
         if (q.Mine) where.Add("p.author_id = @me");
         if (q.Pattern is not null) where.Add("(p.body ilike @pattern escape '!' or p.url ilike @pattern escape '!')");
@@ -39,13 +43,13 @@ public sealed class FeedPostRepository
              order by {order}
              limit @take
              """,
-            new { me, kind = q.Kind, pattern = q.Pattern, count = q.After?.Count ?? 0, at = q.After?.At, id = q.After?.Id, take });
+            new { me, admin, programId, kind = q.Kind, pattern = q.Pattern, count = q.After?.Count ?? 0, at = q.After?.At, id = q.After?.Id, take });
     }
 
-    public Task<FeedPostRow?> Post(Session s, Guid me, Guid id) =>
+    public Task<FeedPostRow?> Post(Session s, Guid me, bool admin, Guid id) =>
         s.First<FeedPostRow>(
-            $"select {PostCols}, {Name} as author_name from feed_posts p join app_users u on u.id = p.author_id where p.id = @id",
-            new { me, id });
+            $"select {PostCols}, {Name} as author_name from feed_posts p join app_users u on u.id = p.author_id where p.id = @id and {Visible}",
+            new { me, admin, id });
 
     /// <summary>The last <paramref name="perPost"/> comments of each post, oldest first.</summary>
     public Task<List<FeedCommentRow>> LastComments(Session s, Guid[] postIds, int perPost) =>
@@ -76,11 +80,12 @@ public sealed class FeedPostRepository
     public Task<int> CommentsToday(Session s, Guid userId) =>
         s.Scalar<int>("select count(*)::int from feed_comments where author_id = @userId and created_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'", new { userId });
 
-    public Task<Guid> InsertPost(Session s, Guid authorId, string? body, string? url) =>
-        s.Scalar<Guid>("insert into feed_posts (author_id, body, url) values (@authorId, @body, @url) returning id", new { authorId, body, url });
+    public Task<Guid> InsertPost(Session s, Guid authorId, Guid? programId, string? body, string? url) =>
+        s.Scalar<Guid>("insert into feed_posts (author_id, program_id, body, url) values (@authorId, @programId, @body, @url) returning id", new { authorId, programId, body, url });
 
-    public Task<Guid?> PostAuthor(Session s, Guid id) =>
-        s.First<Guid?>("select author_id from feed_posts where id = @id", new { id });
+    /// <summary>The author of a post the caller can see; null when it does not exist or is in someone else's program.</summary>
+    public Task<Guid?> PostAuthor(Session s, Guid me, bool admin, Guid id) =>
+        s.First<Guid?>($"select p.author_id from feed_posts p where p.id = @id and {Visible}", new { me, admin, id });
 
     public Task DeletePost(Session s, Guid id) => s.Exec("delete from feed_posts where id = @id", new { id });
 
@@ -100,8 +105,8 @@ public sealed class FeedPostRepository
              select c.id, c.post_id, c.author_id, {Name} as author_name, c.body, c.created_at from c join app_users u on u.id = c.author_id
              """, new { postId, authorId, body })!;
 
-    public Task<Guid?> CommentAuthor(Session s, Guid id) =>
-        s.First<Guid?>("select author_id from feed_comments where id = @id", new { id });
+    public Task<Guid?> CommentAuthor(Session s, Guid me, bool admin, Guid id) =>
+        s.First<Guid?>($"select c.author_id from feed_comments c join feed_posts p on p.id = c.post_id where c.id = @id and {Visible}", new { me, admin, id });
 
     public Task DeleteComment(Session s, Guid id) => s.Exec("delete from feed_comments where id = @id", new { id });
 }

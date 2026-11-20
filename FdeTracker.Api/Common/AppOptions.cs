@@ -32,6 +32,15 @@ public sealed class AppOptions
     public Func<TimeSpan, CancellationToken, Task> Sleep { get; init; } = Task.Delay;
     /// <summary>A number from 0 to 1 that spreads retries out. Tests replace it to get exact waits.</summary>
     public Func<double> Jitter { get; init; } = Random.Shared.NextDouble;
+    /// <summary>Daily status reminders: on/off, the local hour they go out, and the company time zone (IANA name).</summary>
+    public bool RemindersEnabled { get; init; } = true;
+    public int ReminderHour { get; init; } = 10;
+    public string ReminderTimeZone { get; init; } = "Asia/Kolkata";
+    /// <summary>Optional reminder email through Resend (free tier). Without both values only the in-app reminder is made.</summary>
+    public string? ResendApiKey { get; init; }
+    public string? EmailFrom { get; init; }
+    /// <summary>The website address used in email links.</summary>
+    public string AppUrl { get; init; } = "https://fde-tracker-green.vercel.app";
     public int RateLimitPerMinute { get; init; } = 240; // all requests per address
     public int WriteLimitPerMinute { get; init; } = 40; // changes per person
     public int LlmMaxTokens { get; init; } = 3000;
@@ -81,6 +90,12 @@ public sealed class AppOptions
             LlmTemperature = Decimal("LLM_TEMPERATURE", 0, 0, provider == "anthropic" ? 1 : 2) ?? 0,   // Claude accepts 0 to 1, the common API 0 to 2
             LlmTopP = double.TryParse(c["LLM_TOP_P"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var topP) && topP >= 0 && topP <= 1 ? topP : null, // unset, or anything out of range, means "not sent"
             AssistantSummary = string.Equals(c["ASSISTANT_SUMMARY"], "code", StringComparison.OrdinalIgnoreCase) ? "code" : "model",
+            RemindersEnabled = !string.Equals(c["REMINDERS_ENABLED"], "false", StringComparison.OrdinalIgnoreCase),
+            ReminderHour = int.TryParse(c["REMINDER_HOUR"], out var rh) && rh is >= 0 and <= 23 ? rh : 10,
+            ReminderTimeZone = Opt("REMINDER_TIME_ZONE") ?? "Asia/Kolkata",
+            ResendApiKey = Opt("RESEND_API_KEY"),
+            EmailFrom = Opt("EMAIL_FROM"),
+            AppUrl = Opt("APP_URL") is { } appUrl && appUrl.StartsWith("https://", StringComparison.Ordinal) ? appUrl : "https://fde-tracker-green.vercel.app",
             RateLimitPerMinute = Num("RATE_LIMIT_PER_MINUTE", 240),
             WriteLimitPerMinute = Num("WRITE_LIMIT_PER_MINUTE", 40),
         };

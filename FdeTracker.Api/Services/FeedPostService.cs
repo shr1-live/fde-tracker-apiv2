@@ -7,8 +7,8 @@ using FdeTracker.Api.ViewModels;
 
 namespace FdeTracker.Api.Services;
 
-/// <summary>The shared feed: posts, likes and comments for everyone approved. Limits are counted per person per UTC day.</summary>
-public sealed class FeedPostService(Db db, FeedPostRepository repo)
+/// <summary>Each program's feed: posts, likes and comments seen only by that program's people and the admin. Limits are counted per person per UTC day.</summary>
+public sealed class FeedPostService(Db db, FeedPostRepository repo, LearningProgramRepository programs)
 {
     public const int PostsPerDay = 30;
     public const int CommentsPerDay = 200;
@@ -46,10 +46,11 @@ public sealed class FeedPostService(Db db, FeedPostRepository repo)
         return new FeedPostQuery(s, k, mine, pattern, after);
     }
 
-    public Task<FeedPostPageView> Page(AppUser user, FeedPostQuery query, int limit) => db.Read(async s =>
+    public Task<FeedPostPageView> Page(AppUser user, Guid? programId, FeedPostQuery query, int limit) => db.Read(async s =>
     {
         if (limit is < 1 or > MaxLimit) throw ApiException.BadRequest($"limit must be from 1 to {MaxLimit}");
-        var rows = await repo.Page(s, user.Id, query, limit + 1);
+        if (programId is { } pid) await LearningProgramService.Access(s, programs, user, pid); // 404 outside the program
+        var rows = await repo.Page(s, user.Id, user.IsAdmin, programId, query, limit + 1);
         var more = rows.Count > limit;
         if (more) rows.RemoveAt(rows.Count - 1);
         var posts = await WithComments(s, user, rows, ListComments);
@@ -65,7 +66,7 @@ public sealed class FeedPostService(Db db, FeedPostRepository repo)
 
     public Task<FeedPostView> Get(AppUser user, Guid id) => db.Read(async s =>
     {
-        var row = await repo.Post(s, user.Id, id) ?? throw ApiException.NotFound();
+        var row = await repo.Post(s, user.Id, user.IsAdmin, id) ?? throw ApiException.NotFound();
         return (await WithComments(s, user, [row], SingleComments))[0];
     });
 
@@ -79,7 +80,7 @@ public sealed class FeedPostService(Db db, FeedPostRepository repo)
         var url = b.UrlGiven ? b.Url : current.Url;
         if (body is null && url is null) throw ApiException.BadRequest("Write something or add a link");
         await repo.UpdatePost(s, id, body, url);
-        var row = (await repo.Post(s, user.Id, id))!;
+        var row = (await repo.Post(s, user.Id, user.IsAdmin, id))!;
         return (await WithComments(s, user, [row], ListComments))[0];
     });
 
@@ -93,15 +94,16 @@ public sealed class FeedPostService(Db db, FeedPostRepository repo)
     public Task<FeedPostView> Create(AppUser user, FeedPostRequest b) => db.Tx(async s =>
     {
         if (b.Body is null && b.Url is null) throw ApiException.BadRequest("Write something or add a link");
+        if (b.ProgramId is { } pid) await LearningProgramService.Access(s, programs, user, pid); // only into a program you are in
         await repo.LockAuthor(s, user.Id);
         if (await repo.PostsToday(s, user.Id) >= PostsPerDay) throw new ApiException(429, $"You can post up to {PostsPerDay} times a day");
-        var id = await repo.InsertPost(s, user.Id, b.Body, b.Url);
-        return Post((await repo.Post(s, user.Id, id))!, []);
+        var id = await repo.InsertPost(s, user.Id, b.ProgramId, b.Body, b.Url);
+        return Post((await repo.Post(s, user.Id, user.IsAdmin, id))!, []);
     });
 
     public Task Delete(AppUser user, Guid id) => db.Tx<bool>(async s =>
     {
-        var author = await repo.PostAuthor(s, id) ?? throw ApiException.NotFound();
+        var author = await repo.PostAuthor(s, user.Id, user.IsAdmin, id) ?? throw ApiException.NotFound();
         if (author != user.Id && !user.IsAdmin) throw new ApiException(403, "You can only delete your own posts");
         await repo.DeletePost(s, id);
         return true;
@@ -109,13 +111,13 @@ public sealed class FeedPostService(Db db, FeedPostRepository repo)
 
     public Task<FeedLikeView> ToggleLike(AppUser user, Guid id) => db.Tx(async s =>
     {
-        if (await repo.PostAuthor(s, id) is null) throw ApiException.NotFound();
+        if (await repo.PostAuthor(s, user.Id, user.IsAdmin, id) is null) throw ApiException.NotFound();
         return await repo.ToggleLike(s, id, user.Id);
     });
 
     public Task<FeedCommentView> AddComment(AppUser user, Guid postId, FeedCommentRequest b) => db.Tx(async s =>
     {
-        if (await repo.PostAuthor(s, postId) is null) throw ApiException.NotFound();
+        if (await repo.PostAuthor(s, user.Id, user.IsAdmin, postId) is null) throw ApiException.NotFound();
         await repo.LockAuthor(s, user.Id);
         if (await repo.CommentsToday(s, user.Id) >= CommentsPerDay) throw new ApiException(429, $"You can comment up to {CommentsPerDay} times a day");
         return Comment(await repo.InsertComment(s, postId, user.Id, b.Body));
@@ -123,7 +125,7 @@ public sealed class FeedPostService(Db db, FeedPostRepository repo)
 
     public Task DeleteComment(AppUser user, Guid commentId) => db.Tx<bool>(async s =>
     {
-        var author = await repo.CommentAuthor(s, commentId) ?? throw ApiException.NotFound();
+        var author = await repo.CommentAuthor(s, user.Id, user.IsAdmin, commentId) ?? throw ApiException.NotFound();
         if (author != user.Id && !user.IsAdmin) throw new ApiException(403, "You can only delete your own comments");
         await repo.DeleteComment(s, commentId);
         return true;

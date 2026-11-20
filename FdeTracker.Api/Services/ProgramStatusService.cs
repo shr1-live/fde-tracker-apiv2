@@ -10,7 +10,7 @@ using FdeTracker.Api.ViewModels;
 namespace FdeTracker.Api.Services;
 
 /// <summary>Programs V3: daily status, day status and reports. A member sees only themselves; a coordinator or the admin sees everyone in the program.</summary>
-public sealed class ProgramStatusService(Db db, LearningProgramRepository repo)
+public sealed class ProgramStatusService(Db db, LearningProgramRepository repo, NotificationRepository notifications)
 {
     public const int MaxReportDays = 120;
     static readonly DateOnly EarliestDaily = new(2020, 1, 1);
@@ -54,7 +54,9 @@ public sealed class ProgramStatusService(Db db, LearningProgramRepository repo)
         if (d < EarliestDaily || d > Today.AddDays(1)) throw ApiException.BadRequest("The date must be between 2020-01-01 and tomorrow");
         var fields = (await repo.Fields(s, programId)).Where(f => f.Form == "daily").ToList();
         var clean = FieldValues.Check(fields, values, enforceRequired: true);
-        return LpDailyView.From(await repo.SaveDaily(s, programId, user.Id, Iso(d), clean));
+        var saved = await repo.SaveDaily(s, programId, user.Id, Iso(d), clean);
+        await notifications.SettleDailyMissed(s, user.Id, programId, Iso(d)); // filling the day in clears its reminder
+        return LpDailyView.From(saved);
     });
 
     // ---- day status

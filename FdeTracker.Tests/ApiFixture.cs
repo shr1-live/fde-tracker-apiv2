@@ -75,6 +75,7 @@ public class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("RATE_LIMIT_PER_MINUTE", "100000");
         Environment.SetEnvironmentVariable("TASK_MESSAGE_DEADLINE_SECONDS", "2"); // short, so the deadline test does not take a minute; the fake model answers at once
         Environment.SetEnvironmentVariable("WRITE_LIMIT_PER_MINUTE", "100000");
+        Environment.SetEnvironmentVariable("REMINDERS_ENABLED", "false"); // no 10:00 timer in tests; they run reminders with a fixed clock
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureServices(s =>
         {
             s.RemoveAll<ILlmClient>(); // tests never call a real model
@@ -84,6 +85,9 @@ public class ApiFixture : IAsyncLifetime
     }
 
     public FakeLlm Llm { get; } = new();
+
+    /// <summary>The API's services, for tests that call a service directly (for example reminders with a fixed clock).</summary>
+    public IServiceProvider Services => _factory.Services;
 
     /// <summary>The model client the API gets. By default the scripted fake; a fixture may wrap it (for example to test the own-key switch).</summary>
     protected virtual ILlmClient BuildLlm(IServiceProvider services) => Llm;
