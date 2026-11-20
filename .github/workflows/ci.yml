@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-dotnet@v4.3.1
         with:
           dotnet-version: "10.0.x"
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-dotnet@v4.3.1
         with:
           dotnet-version: "10.0.x"
@@ -54,7 +54,7 @@ jobs:
     env:
       GITLEAKS_VERSION: "8.24.3"
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0 # scan the whole history, not only the last commit
       - name: Install gitleaks
