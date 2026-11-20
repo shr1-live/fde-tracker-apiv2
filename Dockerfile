@@ -9,7 +9,7 @@ COPY migrations migrations
 COPY evals/day1-prompts.json evals/day2-cases.json evals/
 RUN dotnet publish FdeTracker.Api -c Release -o /app --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:11.0
 WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_ENVIRONMENT=Production
