@@ -4,7 +4,7 @@ Production backend of the Programs V3 product. The frontend lives in the sibling
 
 | | |
 |---|---|
-| Runs on | Render (Docker), service `fde-tracker-v3-api`, created from [`render.yaml`](render.yaml) |
+| Runs on | Render (Docker), service `fde-tracker-apiv2`, created from [`render.yaml`](render.yaml) |
 | Database | Postgres (Supabase); migrations in `migrations/` run at start-up |
 | Auth | Supabase sign-in token (JWT), invite-only access |
 | Docs | [docs/](docs/) (product, architecture, standards, AI development, QA, security, delivery, decisions) and [AGENTS.md](AGENTS.md) |

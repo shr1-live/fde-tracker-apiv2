@@ -106,9 +106,10 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         var p = (await api.Call("GET", P(Fde), M1)).Body;
         Assert.Equal("member", (string)p["my_role"]!);
         var days = p["days"]!.AsArray();
-        Assert.Equal(5, days.Count);
-        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, days.Select(d => (int)d!["day"]!).ToArray());
-        Assert.All(days, d => Assert.Equal(1, (int)d!["week"]!));
+        Assert.Equal(10, days.Count); // weeks 1 and 2 (migration 017)
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 }, days.Select(d => (int)d!["day"]!).ToArray());
+        Assert.Equal(new[] { 1, 1, 1, 1, 1, 2, 2, 2, 2, 2 }, days.Select(d => (int)d!["week"]!).ToArray());
+        Assert.Equal("RAG Architecture", (string)days[5]!["topic"]!);
         Assert.Equal("LLM Fundamentals & Model Selection", (string)days[0]!["topic"]!);
         Assert.StartsWith("• LLM architecture", (string)days[0]!["topics_to_cover"]!);
         Assert.Contains("Acceptance criteria:", (string)days[4]!["practical_task"]!);
@@ -154,7 +155,7 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Equal(404, await Status("GET", P(Guid.NewGuid().ToString()), Admin));
 
         // days
-        var newDay = new { week = 2, day = 1, topic = "RAG basics", topics_to_cover = "• Chunking" };
+        var newDay = new { week = 3, day = 1, topic = "RAG basics", topics_to_cover = "• Chunking" };
         Assert.Equal(403, await Status("POST", $"{P(Fde)}/days", M1, newDay));
         var day = await api.Call("POST", $"{P(Fde)}/days", Co, newDay);
         Assert.Equal(201, day.Status);
@@ -173,7 +174,7 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Equal(403, await Status("DELETE", $"{P(Fde)}/days/{dayId}", M1));
         Assert.Equal(204, await Status("DELETE", $"{P(Fde)}/days/{dayId}", Co));
         Assert.Equal(404, await Status("DELETE", $"{P(Fde)}/days/{dayId}", Co));
-        Assert.Equal(5, (await api.Call("GET", P(Fde), M1)).Body["days"]!.AsArray().Count);
+        Assert.Equal(10, (await api.Call("GET", P(Fde), M1)).Body["days"]!.AsArray().Count);
 
         // forms (on the second program, so the FDE forms stay the defaults)
         object F(string key, string type = "text", bool required = false, string label = "Label") => new { key, label, description = (string?)null, type, required };
@@ -348,10 +349,10 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Equal(400, await Status("GET", $"{P(Fde)}/reports/daily?from=2026-02-01&to=2026-01-01", Co));
 
         var prog = (await api.Call("GET", $"{P(Fde)}/reports/program", M1)).Body;
-        Assert.Equal(5, prog["days"]!.AsArray().Count);
+        Assert.Equal(10, prog["days"]!.AsArray().Count); // weeks 1 and 2
         Assert.Equal(3, prog["fields"]!.AsArray().Count);
         var person = Assert.Single(prog["people"]!.AsArray())!;
-        Assert.Equal(5, person["rows"]!.AsArray().Count);
+        Assert.Equal(10, person["rows"]!.AsArray().Count);
         Assert.True((bool)person["rows"]![0]!["completed"]!);
         Assert.Equal(4, (int)person["rows"]![0]!["values"]!["rating"]!);
         Assert.True((await api.Call("GET", $"{P(Fde)}/reports/program", Co)).Body["people"]!.AsArray().Count >= 3);
@@ -531,7 +532,7 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.True(await service.RunReminders(nowUtc: now) > 0);
         Assert.Equal(0, await service.RunReminders(nowUtc: now)); // repeating the run sends nothing twice
         Assert.Equal(1, await api.Count($"select count(*) from notifications where user_id = '{M1.Id}' and program_id = '{Fde}' and on_date = '{tue}'"));
-        Assert.Equal(0, await api.Count($"select count(*) from notifications where user_id = '{Admin.Id}'")); // the admin has no daily status
+        Assert.Equal(0, await api.Count($"select count(*) from notifications where user_id = '{Admin.Id}' and kind = 'daily_missed'")); // the admin has no daily status
 
         var list = (await api.Call("GET", "/api/notifications", M1)).Body;
         var mine = list["items"]!.AsArray().Single(n => (string?)n!["on_date"] == tue && (string?)n!["program_id"] == Fde)!;
@@ -698,5 +699,53 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.True(await api.Count("select count(*) from lp_time_cells c join lp_time_tasks t on t.id = c.task_id join app_users u on u.id = t.user_id where u.display_name = 'Asha Test' and t.title = 'Project work' and c.minutes = 120") <= 1);
         await demo.Remove();
         Assert.Equal(0, await api.Count("select count(*) from app_users where display_name = 'Asha Test'"));
+    }
+
+    [Fact]
+    public async Task V18_what_people_fill_in_is_seen_and_announced_up_the_chain_member_to_coordinator_and_admin_coordinator_to_admin()
+    {
+        string Q(TestUser who, string kind, TestUser subject) => $"select count(*) from notifications where user_id = '{who.Id}' and kind = '{kind}' and subject_user_id = '{subject.Id}' and program_id = '{Fde}' and on_date = '{Today}' and read_at is null";
+
+        // A member fills in a daily status: the coordinator and the admin can read it and are told; other members cannot read it and are not told.
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/daily/{Today}", M1, DailyValues("Estimator, 2 h")));
+        Assert.Equal("Estimator, 2 h", (string)(await api.Call("GET", $"{P(Fde)}/daily?user_id={M1.Id}", Co)).Body.AsArray().First(x => (string)x!["on_date"]! == Today)!["values"]!["project"]!);
+        Assert.Equal(200, await Status("GET", $"{P(Fde)}/daily?user_id={M1.Id}", Admin));
+        Assert.Equal(403, await Status("GET", $"{P(Fde)}/daily?user_id={M1.Id}", M2));
+        Assert.Equal(1, await api.Count(Q(Co, "status_updated", M1)));
+        Assert.Equal(1, await api.Count(Q(Admin, "status_updated", M1)));
+        Assert.Equal(0, await api.Count(Q(M2, "status_updated", M1)));
+        Assert.Equal(0, await api.Count(Q(M1, "status_updated", M1)));
+        var n = (await api.Call("GET", "/api/notifications", Co)).Body["items"]!.AsArray().First(x => (string)x!["kind"]! == "status_updated")!;
+        Assert.Equal($"/p/{Fde}/daily?person={M1.Id}&date={Today}", (string)n["link"]!);
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/daily/{Today}", M1, DailyValues("Estimator, 3 h"))); // editing again does not add a second one
+        Assert.Equal(1, await api.Count(Q(Co, "status_updated", M1)));
+
+        // A completed program day is announced too (a draft is not); both are readable by the coordinator and the admin.
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/day-status/{Day2}", M2, new { values = new { }, completed = false }));
+        Assert.Equal(0, await api.Count(Q(Co, "day_completed", M2)));
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/day-status/{Day2}", M2, new { values = new { learned = "Prompt versions", rating = 4 }, completed = true }));
+        Assert.Equal(1, await api.Count(Q(Co, "day_completed", M2)));
+        Assert.Equal(1, await api.Count(Q(Admin, "day_completed", M2)));
+        Assert.Equal(0, await api.Count(Q(M1, "day_completed", M2)));
+        Assert.Equal(200, await Status("GET", $"{P(Fde)}/day-status?user_id={M2.Id}", Co));
+        Assert.Equal(200, await Status("GET", $"{P(Fde)}/day-status?user_id={M2.Id}", Admin));
+        Assert.Equal(403, await Status("GET", $"{P(Fde)}/day-status?user_id={M2.Id}", M1));
+
+        // A coordinator's own entries reach the admin (and no member), and the admin reads them.
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/daily/{Today}", Co, DailyValues("Reviewing week 2")));
+        Assert.Equal(1, await api.Count(Q(Admin, "status_updated", Co)));
+        Assert.Equal(0, await api.Count(Q(M1, "status_updated", Co)));
+        Assert.Equal(0, await api.Count(Q(Co, "status_updated", Co)));
+        Assert.Equal(200, await Status("GET", $"{P(Fde)}/daily?user_id={Co.Id}", Admin));
+        Assert.Equal(403, await Status("GET", $"{P(Fde)}/daily?user_id={Co.Id}", M1));
+
+        // The timesheet: a coordinator submitting a week tells the admin; the member's submission was covered by V15.
+        var monday = DateTime.UtcNow.Date;
+        while (monday.DayOfWeek != DayOfWeek.Monday) monday = monday.AddDays(-1);
+        var week = monday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/timesheet/{week}", Co, new { submit = true, tasks = new object[] { new { title = "Reviews", cells = new object[] { new { date = week, minutes = 90 } } } } }));
+        Assert.Equal(1, await api.Count(Q(Admin, "week_submitted", Co)));
+        Assert.Equal(0, await api.Count(Q(M1, "week_submitted", Co)));
+        Assert.Equal(200, await Status("GET", $"{P(Fde)}/timesheet/{week}?user_id={Co.Id}", Admin));
     }
 }
