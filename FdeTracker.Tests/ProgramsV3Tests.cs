@@ -748,4 +748,44 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Equal(0, await api.Count(Q(M1, "week_submitted", Co)));
         Assert.Equal(200, await Status("GET", $"{P(Fde)}/timesheet/{week}?user_id={Co.Id}", Admin));
     }
+
+    [Fact]
+    public async Task V19_text_that_cannot_be_stored_is_refused_with_400_not_a_server_error()
+    {
+        // A NUL character cannot be saved as JSON in Postgres; it used to come back as a 500.
+        Assert.Equal(400, await Status("PUT", $"{P(Fde)}/daily/{Today}", M1, DailyValues(practical: "a\u0000b")));
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/daily/{Today}", M1, DailyValues(practical: "Emoji are fine 🚀 and so is O'Brien; DROP TABLE x;--")));
+        // The day message names the day that was completed.
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/day-status/{Day1}", M1, new { values = new { learned = "Tokens", rating = 4 }, completed = true }));
+        var n = (await api.Call("GET", "/api/notifications", Co)).Body["items"]!.AsArray().First(x => (string)x!["kind"]! == "day_completed" && ((string)x["title"]!).Contains("week 1 day 1"))!;
+        Assert.Equal($"/p/{Fde}/reports", (string)n["link"]!);
+    }
+
+    [Fact]
+    public async Task V20_the_devops_plan_fills_thirty_days_for_the_real_program_only_and_the_demo_copies_it()
+    {
+        var db = api.Services.GetRequiredService<FdeTracker.Api.Data.Db>();
+        var created = await api.Call("POST", "/api/programs", Admin, new { name = "Devops", description = "Study plan" });
+        Assert.Equal(201, created.Status);
+        var id = (string)created.Body["id"]!;
+        Assert.Equal(0, await api.Count($"select count(*) from lp_days where program_id = '{id}'"));
+
+        var sql = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "migrations", "019_devops_plan.sql"));
+        await db.Exec(sql);
+        await db.Exec(sql); // running it again rewrites the same rows
+        Assert.Equal(30, await api.Count($"select count(*) from lp_days where program_id = '{id}'"));
+        Assert.Equal(7, await api.Count($"select count(*) from lp_days where program_id = '{id}' and week = 1"));
+        Assert.Equal(2, await api.Count($"select count(*) from lp_days where program_id = '{id}' and week = 5"));
+        var first = (await api.Call("GET", P(id), Admin)).Body["days"]!.AsArray()[0]!;
+        Assert.Equal("Linux filesystem, users and permissions", (string)first["topic"]!);
+        Assert.StartsWith("• Linux (Ubuntu)", (string)first["topics_to_cover"]!);
+        Assert.Equal(10, await api.Count($"select count(*) from lp_days where program_id = '{Fde}'")); // the FDE plan is untouched
+
+        // The demo DevOps program copies this plan, and its answers are about DevOps, not the FDE week 1 text.
+        Assert.Equal(200, await Status("POST", "/api/admin/demo-data", Admin));
+        Assert.Equal(30, await api.Count("select count(*) from lp_days d join lp_programs p on p.id = d.program_id where p.is_demo and p.name like 'DevOps%'"));
+        Assert.Equal(0, await api.Count("select count(*) from lp_day_status s join lp_programs p on p.id = s.program_id where p.is_demo and p.name like 'DevOps%' and s.\"values\"::text like '%qwen%'"));
+        Assert.Equal(200, await Status("DELETE", "/api/admin/demo-data", Admin));
+        Assert.Equal(30, await api.Count($"select count(*) from lp_days where program_id = '{id}'")); // removing the demo leaves the real plan alone
+    }
 }

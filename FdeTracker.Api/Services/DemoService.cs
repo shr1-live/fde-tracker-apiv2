@@ -168,7 +168,13 @@ public sealed class DemoService(Db db)
             select @fde, week, day, topic, topics_to_cover, practical_task, resources from lp_days where program_id = @rp
             """, new { fde, rp }) : 0;
         if (copied < FdePlan.Length) { await s.Exec("delete from lp_days where program_id = @fde", new { fde }); await Days(s, fde, FdePlan); } // weeks 1 and 2 must both be there
-        await Days(s, dev, DevPlan);
+        // The DevOps demo copies the real DevOps program's 30-day plan when it exists, like the FDE demo does.
+        var realDev = await s.First<Guid?>("select id from lp_programs where lower(name) = 'devops' and not is_demo order by created_at limit 1");
+        var devCopied = realDev is { } rd ? await s.Exec("""
+            insert into lp_days (program_id, week, day, topic, topics_to_cover, practical_task, resources)
+            select @dev, week, day, topic, topics_to_cover, practical_task, resources from lp_days where program_id = @rd
+            """, new { dev, rd }) : 0;
+        if (devCopied < 30) { await s.Exec("delete from lp_days where program_id = @dev", new { dev }); await Days(s, dev, DevPlan); }
 
         // ---- who is where: a coordinator per program, one person in both, a coordinator who is a member elsewhere
         async Task Member(Guid pid, string k, string role, DateOnly since) =>
@@ -181,31 +187,31 @@ public sealed class DemoService(Db db)
         await s.Exec("insert into lp_invites (program_id, email, role, invited_by) values (@dev, @email, 'member', @by)", new { dev, email = $"new.joiner@{Domain}", by = ids["rahul"] });
 
         var fields = await s.Query<FieldRow>("select form, key, type from lp_form_fields where program_id = @fde", new { fde });
-        string Values(string form, int i, bool full = true) => JsonSerializer.Serialize(fields.Where(f => f.Form == form).ToDictionary(f => f.Key, f => (object)(f.Type switch
+        string Values(string form, int i, bool full = true, bool fde = true) => JsonSerializer.Serialize(fields.Where(f => f.Form == form).ToDictionary(f => f.Key, f => (object)(f.Type switch
         {
-            "rating" => form == "day" && i < Week1Sample.Days.Length ? Week1Sample.Days[i].Rate ?? 3 : 3 + i % 3,
+            "rating" => fde && form == "day" && i < Week1Sample.Days.Length ? Week1Sample.Days[i].Rate ?? 3 : 3 + i % 3,
             "number" => 2 + i % 3,
             "url" => "https://github.com/fiftyfive-demo/fde-practicals",
-            _ => form == "day" && i < Week1Sample.Days.Length
+            _ => fde && form == "day" && i < Week1Sample.Days.Length
                 ? (f.Key.Contains("proof") ? Week1Sample.Days[i].Proof : Week1Sample.Days[i].Learned)
                 : form == "day"
-                ? (f.Key.Contains("proof") ? $"https://github.com/fiftyfive-demo/fde-practicals/tree/main/day-{i + 1}" : full ? DayNotes[i % DayNotes.Length] : "Halfway through the practical.")
+                ? (f.Key.Contains("proof") ? $"https://github.com/fiftyfive-demo/{(fde ? "fde-practicals" : "devops-labs")}/tree/main/day-{i + 1}" : full ? (fde ? DayNotes[i % DayNotes.Length] : DevNotes[i % DevNotes.Length]) : "Halfway through the lab.")
                 : f.Key.Contains("project") ? Projects[i % Projects.Length] : f.Key.Contains("theory") ? $"Day {i + 1} topics covered, about 3 h" : "Practical task in progress; pushed the first version.",
         })));
 
         // ---- plan progress (day status)
-        async Task Progress(Guid pid, string k, int done, int open)
+        async Task Progress(Guid pid, string k, int done, int open, bool fde = true)
         {
             var days = await s.Query<DayRow>("select id, topic from lp_days where program_id = @pid order by week, day", new { pid });
             for (var i = 0; i < done + open && i < days.Count; i++)
                 await s.Exec("""
                     insert into lp_day_status (program_id, user_id, day_id, "values", completed, completed_at)
                     values (@pid, @u, @d, @v::jsonb, @c, case when @c then now() end)
-                    """, new { pid, u = ids[k], d = days[i].Id, v = Values("day", i, i < done), c = i < done });
+                    """, new { pid, u = ids[k], d = days[i].Id, v = Values("day", i, i < done, fde), c = i < done });
         }
         await Progress(fde, "asha", 4, 1); await Progress(fde, "karan", 4, 1); await Progress(fde, "neha", 3, 2);   // week 1: days 1-4 done, day 5 (the end-to-end app) open
         await Progress(fde, "rahul", 4, 1); await Progress(fde, "vikram", 3, 1); await Progress(fde, "arjun", 2, 0);
-        await Progress(dev, "arjun", 3, 0); await Progress(dev, "karan", 2, 1);
+        await Progress(dev, "arjun", 3, 0, false); await Progress(dev, "karan", 2, 1, false);
 
         // ---- daily log (timesheet) + the old daily form for the first week
         async Task Log(Guid pid, string k, DateOnly from, Func<DateOnly, bool> skip, (string Title, double[] Hours)[] tasks, bool submitPast)
@@ -373,6 +379,14 @@ public sealed class DemoService(Db db)
         "Built a 30-case evaluation set and an LLM-as-judge check.",
         "Wired the pieces into one assistant with logging and guardrails.",
         "RAG basics: chunking, embeddings and retrieval with citations.",
+    ];
+    static readonly string[] DevNotes =
+    [
+        "Worked through the lab in the playground and wrote down every command I used.",
+        "Broke the setup on purpose, read the logs and fixed it; the cause was a wrong file mode.",
+        "Wrote the script with set -euo pipefail and tested the failure path as well as the happy path.",
+        "Compared the before and after: the image went from 1.1 GB to under 200 MB.",
+        "Got the pipeline green; the fix was a missing permission on the token.",
     ];
     static readonly (string, string, string)[] FdePlan =
     [
