@@ -748,4 +748,16 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         Assert.Equal(0, await api.Count(Q(M1, "week_submitted", Co)));
         Assert.Equal(200, await Status("GET", $"{P(Fde)}/timesheet/{week}?user_id={Co.Id}", Admin));
     }
+
+    [Fact]
+    public async Task V19_text_that_cannot_be_stored_is_refused_with_400_not_a_server_error()
+    {
+        // A NUL character cannot be saved as JSON in Postgres; it used to come back as a 500.
+        Assert.Equal(400, await Status("PUT", $"{P(Fde)}/daily/{Today}", M1, DailyValues(practical: "a\u0000b")));
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/daily/{Today}", M1, DailyValues(practical: "Emoji are fine 🚀 and so is O'Brien; DROP TABLE x;--")));
+        // The day message names the day that was completed.
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/day-status/{Day1}", M1, new { values = new { learned = "Tokens", rating = 4 }, completed = true }));
+        var n = (await api.Call("GET", "/api/notifications", Co)).Body["items"]!.AsArray().First(x => (string)x!["kind"]! == "day_completed" && ((string)x["title"]!).Contains("week 1 day 1"))!;
+        Assert.Equal($"/p/{Fde}/reports", (string)n["link"]!);
+    }
 }

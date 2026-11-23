@@ -73,11 +73,11 @@ public sealed class ProgramStatusService(Db db, LearningProgramRepository repo, 
     public Task<LpDayStatusView> SaveDayStatus(AppUser user, Guid programId, Guid dayId, JsonElement values, bool completed) => db.Tx(async s =>
     {
         await LearningProgramService.Access(s, repo, user, programId);
-        if (await repo.Day(s, programId, dayId) is null) throw ApiException.NotFound();
+        var planDay = await repo.Day(s, programId, dayId) ?? throw ApiException.NotFound();
         var fields = (await repo.Fields(s, programId)).Where(f => f.Form == "day").ToList();
         var clean = FieldValues.Check(fields, values, enforceRequired: completed);
         var saved = await repo.SaveDayStatus(s, programId, user.Id, dayId, clean, completed);
-        if (completed) await notifications.StatusSaved(s, programId, user.Id, "day_completed", Iso(Today), "completed a program day", $"/p/{programId}/reports"); // coordinators and the admin hear about it
+        if (completed) await notifications.StatusSaved(s, programId, user.Id, "day_completed", Iso(Today), $"completed week {planDay.Week} day {planDay.Day}", $"/p/{programId}/reports"); // coordinators and the admin hear about it
         return LpDayStatusView.From(saved);
     });
 
@@ -163,6 +163,19 @@ public static class FieldValues
         return clean.ToJsonString();
     }
 
+    /// <summary>False for text Postgres cannot store as JSON: a NUL character, or half of a surrogate pair (it would be a 500 at save time).</summary>
+    static bool Storable(string s)
+    {
+        for (var i = 0; i < s.Length; i++)
+        {
+            var c = s[i];
+            if (c == '\0') return false;
+            if (char.IsHighSurrogate(c)) { if (i + 1 < s.Length && char.IsLowSurrogate(s[i + 1])) i++; else return false; }
+            else if (char.IsLowSurrogate(c)) return false;
+        }
+        return true;
+    }
+
     static string Short(string s) => s.Length > 40 ? s[..40] : s;
 
     /// <summary>The value to store, or null when it is empty (counts as missing).</summary>
@@ -177,6 +190,7 @@ public static class FieldValues
             {
                 if (v.ValueKind != JsonValueKind.String) throw ApiException.BadRequest($"{f.Label} must be text");
                 var text = v.GetString()!.Trim();
+                if (!Storable(text)) throw ApiException.BadRequest($"{f.Label} contains characters that cannot be saved");
                 var max = f.Type == "text" ? 500 : 4000;
                 if (text.Length > max) throw ApiException.BadRequest($"{f.Label}: at most {max} characters");
                 return JsonValue.Create(text);
@@ -185,6 +199,7 @@ public static class FieldValues
             {
                 if (v.ValueKind != JsonValueKind.String) throw ApiException.BadRequest($"{f.Label} must be a link");
                 var url = v.GetString()!.Trim();
+                if (!Storable(url)) throw ApiException.BadRequest($"{f.Label} contains characters that cannot be saved");
                 if (url.Length > 500 || !Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Scheme != Uri.UriSchemeHttps || url.Any(char.IsWhiteSpace))
                     throw ApiException.BadRequest($"{f.Label} must be a link starting with https:// (at most 500 characters)");
                 return JsonValue.Create(url);

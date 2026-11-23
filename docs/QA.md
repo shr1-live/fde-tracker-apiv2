@@ -6,8 +6,8 @@ AI agents wrote and ran most tests. The owner checked the numbers, looked at scr
 
 | Layer | Tool | Size | Runs |
 |---|---|---|---|
-| API integration tests | xUnit + Testcontainers (a real Postgres per run) | 274 tests pass (`dotnet test`) | Before every push; needs Docker |
-| Review | `code-reviewer` and `security-reviewer` agents | Last round: 0 serious findings, 4 small ones fixed | Before every push |
+| API integration tests | xUnit + Testcontainers (a real Postgres per run) | 275 tests pass (`dotnet test`) | Before every push; needs Docker |
+| Review | `code-reviewer` and `security-reviewer` agents | Last round: 0 serious findings, 4 small ones fixed. Latest: an independent reviewer agent attacked the running API; one real defect (a NUL character in a status value returned 500) was fixed and tested (V19) | Before every push |
 | Live checks | curl and browser | `/health`, 401 when signed out, CORS, security headers, served bundle | After a deploy |
 
 The browser checks live in the frontend repository. See the [frontend QA page](https://github.com/shr1-live/fde-tracker-appv2/blob/main/docs/QA.md).
