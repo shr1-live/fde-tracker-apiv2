@@ -101,5 +101,26 @@ public sealed class NotificationRepository
             do update set created_at = now(), read_at = null, title = excluded.title, body = excluded.body
             """, new { programId, submitter, week });
 
+    /// <summary>
+    /// Tells the program's coordinators and every admin (never the person themself) that someone saved a status: a daily status
+    /// (<c>status_updated</c>, one per person and date) or a completed program day (<c>day_completed</c>, one per person and day).
+    /// Saving again refreshes the same notification and shows it as new, so a person who edits a lot does not flood anyone.
+    /// </summary>
+    public Task<int> StatusSaved(Session s, Guid programId, Guid person, string kind, string onDate, string what, string link) =>
+        s.Exec("""
+            insert into notifications (user_id, kind, program_id, on_date, subject_user_id, title, body, link)
+            select r.user_id, @kind, p.id, @onDate::date, @person,
+                   left(who.name || ' ' || @what || ' in ' || p.name, 200),
+                   left(who.name || ' ' || @what || ' in ' || p.name || '.', 1000),
+                   @link
+            from lp_programs p
+            cross join (select split_part(coalesce(nullif(btrim(display_name), ''), email), '@', 1) as name from app_users where id = @person) who
+            join (select user_id from lp_members where program_id = @programId and role = 'coordinator'
+                  union select id from app_users where role = 'admin') r on r.user_id <> @person
+            where p.id = @programId
+            on conflict (user_id, kind, program_id, on_date, (coalesce(subject_user_id, '00000000-0000-0000-0000-000000000000'::uuid)))
+            do update set created_at = now(), read_at = null, title = excluded.title, body = excluded.body
+            """, new { programId, person, kind, onDate, what, link });
+
     public Task<int> MarkEmailed(Session s, Guid id) => s.Exec("update notifications set emailed_at = now() where id = @id", new { id });
 }

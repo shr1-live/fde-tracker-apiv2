@@ -100,3 +100,17 @@ JSON uses snake_case like the existing API. Errors use the existing `{ error }` 
 ## Out of scope (removed from the web app, kept in the `main_backup_me` branch)
 
 Assistants, task assistant, practice lab, backlog, study notes, week pages, my plan, downloads, submission review, view-as switch, old reports and old dashboard. Their backend endpoints stay as they are for now.
+
+## Notifications (migrations 012, 016, 018)
+
+In-app, one bell per person: `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`. Kinds:
+
+| Kind | Who is told | When |
+|---|---|---|
+| `daily_missed` | the person | 10:00 company time on a weekday, for the previous working day, per program |
+| `week_submitted` | the program's coordinators and the admin (never the submitter) | a week of the timesheet is submitted |
+| `status_updated` | the program's coordinators and the admin (never the person) | a daily status is saved; one per person and date, a re-save shows it as new |
+| `day_completed` | the program's coordinators and the admin (never the person) | a program day is saved as completed (a draft is not announced) |
+
+A member's entries reach the coordinators and the admin; a coordinator's reach the other coordinators and the admin. Other members are never told. Everyone above can also read the entries (`daily`, `day-status`, `timesheet` with `user_id`); a member asking for someone else's gets 403.
+

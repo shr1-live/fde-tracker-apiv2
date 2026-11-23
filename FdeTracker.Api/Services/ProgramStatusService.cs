@@ -56,6 +56,7 @@ public sealed class ProgramStatusService(Db db, LearningProgramRepository repo, 
         var clean = FieldValues.Check(fields, values, enforceRequired: true);
         var saved = await repo.SaveDaily(s, programId, user.Id, Iso(d), clean);
         await notifications.SettleDailyMissed(s, user.Id, programId, Iso(d)); // filling the day in clears its reminder
+        await notifications.StatusSaved(s, programId, user.Id, "status_updated", Iso(d), "updated their daily status for " + d.ToString("ddd d MMM", CultureInfo.InvariantCulture), $"/p/{programId}/daily?person={user.Id}&date={Iso(d)}"); // the people above hear about it
         return LpDailyView.From(saved);
     });
 
@@ -75,7 +76,9 @@ public sealed class ProgramStatusService(Db db, LearningProgramRepository repo, 
         if (await repo.Day(s, programId, dayId) is null) throw ApiException.NotFound();
         var fields = (await repo.Fields(s, programId)).Where(f => f.Form == "day").ToList();
         var clean = FieldValues.Check(fields, values, enforceRequired: completed);
-        return LpDayStatusView.From(await repo.SaveDayStatus(s, programId, user.Id, dayId, clean, completed));
+        var saved = await repo.SaveDayStatus(s, programId, user.Id, dayId, clean, completed);
+        if (completed) await notifications.StatusSaved(s, programId, user.Id, "day_completed", Iso(Today), "completed a program day", $"/p/{programId}/reports"); // coordinators and the admin hear about it
+        return LpDayStatusView.From(saved);
     });
 
     // ---- reports
