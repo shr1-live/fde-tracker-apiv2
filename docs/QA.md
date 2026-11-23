@@ -6,7 +6,7 @@ AI agents wrote and ran most tests. The owner checked the numbers, looked at scr
 
 | Layer | Tool | Size | Runs |
 |---|---|---|---|
-| API integration tests | xUnit + Testcontainers (a real Postgres per run) | 264 tests pass (`dotnet test`) | Before every push; needs Docker |
+| API integration tests | xUnit + Testcontainers (a real Postgres per run) | 274 tests pass (`dotnet test`) | Before every push; needs Docker |
 | Review | `code-reviewer` and `security-reviewer` agents | Last round: 0 serious findings, 4 small ones fixed | Before every push |
 | Live checks | curl and browser | `/health`, 401 when signed out, CORS, security headers, served bundle | After a deploy |
 
@@ -18,6 +18,7 @@ The browser checks live in the frontend repository. See the [frontend QA page](h
 - **Invite-only:** unknown emails stay pending; invites become memberships at sign-in; an invite never lifts a rejection.
 - **Validation:** unknown form keys, wrong types, values out of range, http (not https) links, dates outside 2020-01-01 to tomorrow, too-long text; bad feed sort, kind, limit, search or cursor give 400.
 - **Edge cases:** keyset paging with equal counts and equal times; a cursor from another sort; `%` and `_` in search are literal; days with nothing filled in show as not started; Excel files read back (file name, sheets, layout); the daily post limit (30).
+- **Who sees and who is told (V18):** a member saves a daily status and completes a day; the coordinator and the admin can read both and are told once; another member can neither read nor is told. A coordinator's entries reach the admin, not members. A repeat save does not add a second notification.
 - **Data rules:** counters stay right after likes and comments are added and removed; RLS is on and public roles are revoked for every table.
 
 
