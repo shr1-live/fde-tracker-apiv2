@@ -59,6 +59,7 @@ public sealed class NotificationService(Db db, NotificationRepository repo, AppO
     async Task Email(NewReminderRow r)
     {
         if (options.ResendApiKey is not { Length: > 0 } key || options.EmailFrom is not { Length: > 0 } from) return; // email is optional
+        if (DemoService.IsDemoEmail(r.Email)) return; // demo people have no real inbox
         try
         {
             var link = options.AppUrl.TrimEnd('/') + (r.Link ?? "/");

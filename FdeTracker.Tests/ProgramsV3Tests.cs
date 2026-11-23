@@ -616,4 +616,87 @@ public sealed class ProgramsV3Tests(ApiFixture api) : IClassFixture<ApiFixture>
         // A later save without submit is a draft again.
         Assert.Null((await api.Call("PUT", path, M1, new { submit = false, tasks = new object[] { new { title = "Day 5 theory", cells = Array.Empty<object>() } } })).Body["submitted_at"]);
     }
+
+    [Fact]
+    public async Task V15_submitting_a_week_tells_the_coordinators_and_the_admin()
+    {
+        var monday = DateTime.UtcNow.Date;
+        while (monday.DayOfWeek != DayOfWeek.Monday) monday = monday.AddDays(-1);
+        var week = monday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var body = new { submit = true, tasks = new object[] { new { title = "Theory", cells = new object[] { new { date = week, minutes = 120 } } } } };
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/timesheet/{week}", M2, body));
+        string Q(TestUser u) => $"select count(*) from notifications where user_id = '{u.Id}' and kind = 'week_submitted' and subject_user_id = '{M2.Id}' and program_id = '{Fde}' and read_at is null";
+        Assert.Equal(1, await api.Count(Q(Co)));
+        Assert.Equal(1, await api.Count(Q(Admin)));
+        Assert.Equal(0, await api.Count(Q(M1)));   // other members are not told
+        Assert.Equal(0, await api.Count(Q(M2)));   // nor the person who submitted
+        var n = (await api.Call("GET", "/api/notifications", Co)).Body["items"]!.AsArray().First(x => (string)x!["kind"]! == "week_submitted")!;
+        Assert.Equal($"/p/{Fde}/daily?person={M2.Id}&date={week}", (string)n["link"]!);
+        Assert.Equal(204, await Status("POST", $"/api/notifications/{(string)n["id"]!}/read", Co));
+        Assert.Equal(200, await Status("PUT", $"{P(Fde)}/timesheet/{week}", M2, body)); // submitting again shows it as new
+        Assert.Equal(1, await api.Count(Q(Co)));
+    }
+
+    [Fact]
+    public async Task V16_demo_data_is_admin_only_kept_apart_and_removed_in_one_go()
+    {
+        var realPeople = await api.Count("select count(*) from app_users");
+        var realMembers = await api.Count($"select count(*) from lp_members where program_id = '{Fde}'");
+        Assert.Equal(403, await Status("POST", "/api/admin/demo-data", Co));
+        Assert.Equal(200, await Status("POST", "/api/admin/demo-data", Admin));
+        Assert.Equal(409, await Status("POST", "/api/admin/demo-data", Admin)); // already loaded
+        Assert.True((bool)(await api.Call("GET", "/api/admin/demo-data", Admin)).Body["loaded"]!);
+        Assert.Equal(2, await api.Count("select count(*) from lp_programs where is_demo and name like '%(Demo)'"));
+        Assert.True(await api.Count("select count(*) from lp_time_cells c join lp_time_tasks t on t.id = c.task_id join lp_programs p on p.id = t.program_id where p.is_demo") > 20);
+        Assert.True(await api.Count("select count(*) from feed_posts f join lp_programs p on p.id = f.program_id where p.is_demo") >= 5);
+        Assert.Equal(0, await api.Count("select count(*) from app_users where email like '%@demo.local' and access_status <> 'approved'"));
+        // Demo programs are invisible to people outside them.
+        var m1Programs = (await api.Call("GET", "/api/programs", M1)).Body.AsArray();
+        Assert.DoesNotContain(m1Programs, x => ((string)x!["name"]!).EndsWith("(Demo)"));
+
+        Assert.Equal(200, await Status("DELETE", "/api/admin/demo-data", Admin));
+        Assert.Equal(0, await api.Count("select count(*) from lp_programs where is_demo"));
+        Assert.Equal(0, await api.Count("select count(*) from app_users where email like '%@demo.local'"));
+        Assert.Equal(realPeople, await api.Count("select count(*) from app_users"));
+        Assert.Equal(realMembers, await api.Count($"select count(*) from lp_members where program_id = '{Fde}'"));
+    }
+
+    [Fact]
+    public async Task V17_the_training_sheets_fill_the_demo_program_with_their_people_and_status()
+    {
+        static MemoryStream Book(Action<XLWorkbook> fill) { var ms = new MemoryStream(); using (var wb = new XLWorkbook()) { fill(wb); wb.SaveAs(ms); } ms.Position = 0; return ms; }
+        using var report = Book(wb =>
+        {
+            wb.AddWorksheet("FDE Readiness Guide").Cell(1, 1).Value = "Guide";
+            var ws = wb.AddWorksheet("Asha Test");
+            string[] head = ["Week", "Topic", "Topics to Cover", "Practical Task", "What You Learn", "Proof of Evidence", "Rate (1-5)"];
+            for (var c = 0; c < head.Length; c++) ws.Cell(1, c + 1).Value = head[c];
+            ws.Cell(2, 1).Value = "Week 1"; ws.Cell(2, 2).Value = "LLM Fundamentals"; ws.Cell(2, 5).Value = "Built an endpoint"; ws.Cell(2, 6).Value = "https://github.com/x/y"; ws.Cell(2, 7).Value = "4";
+            ws.Cell(3, 2).Value = "Prompting"; ws.Cell(3, 5).Value = "Compared prompts";
+        });
+        using var daily = Book(wb =>
+        {
+            var ws = wb.AddWorksheet("Status");
+            ws.Cell(1, 1).Value = "Name"; ws.Cell(1, 2).Value = "Day 1"; ws.Cell(1, 3).Value = "Day 2";
+            ws.Cell(2, 1).Value = "Asha Test";
+            ws.Cell(2, 2).Value = "Project Worked: Vector7 - 2 hours\nTraining Theory: Day 1 topics, 3 hours\nPractical: Endpoint built";
+            ws.Cell(2, 3).Value = "Project Worked: None\nTraining Theory: Day 2 topics\nPractical: In progress";
+        });
+        var sheet = FdeTracker.Api.Services.DemoService.ReadSheets(report, daily);
+        Assert.Equal(2, sheet.Plan.Count);
+        var asha = Assert.Single(sheet.People);
+        Assert.Equal("Asha Test", asha.Name);
+        Assert.Equal("4", asha.Days[0].Rate);
+        Assert.Equal(2, asha.Daily.Count);
+
+        var demo = api.Services.GetRequiredService<FdeTracker.Api.Services.DemoService>();
+        var loaded = await demo.Load(sheet: sheet);
+        Assert.True(loaded.People >= 9);
+        Assert.Equal(1, await api.Count("select count(*) from app_users where display_name = 'Asha Test' and email like '%@demo.local'"));
+        Assert.Equal(1, await api.Count("select count(*) from lp_day_status s join app_users u on u.id = s.user_id where u.display_name = 'Asha Test' and s.completed"));
+        Assert.True(await api.Count("select count(*) from lp_daily_status s join app_users u on u.id = s.user_id where u.display_name = 'Asha Test'") >= 1);
+        Assert.True(await api.Count("select count(*) from lp_time_cells c join lp_time_tasks t on t.id = c.task_id join app_users u on u.id = t.user_id where u.display_name = 'Asha Test' and t.title = 'Project work' and c.minutes = 120") <= 1);
+        await demo.Remove();
+        Assert.Equal(0, await api.Count("select count(*) from app_users where display_name = 'Asha Test'"));
+    }
 }
