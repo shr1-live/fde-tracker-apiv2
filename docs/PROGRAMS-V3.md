@@ -110,7 +110,7 @@ In-app, one bell per person: `GET /api/notifications`, `POST /api/notifications/
 | `daily_missed` | the person | 10:00 company time on a weekday, for the previous working day, per program |
 | `week_submitted` | the program's coordinators and the admin (never the submitter) | a week of the timesheet is submitted |
 | `status_updated` | the program's coordinators and the admin (never the person) | a daily status is saved; one per person and date, a re-save shows it as new |
-| `day_completed` | the program's coordinators and the admin (never the person) | a program day is saved as completed (a draft is not announced) |
+| `day_completed` | the program's coordinators and the admin (never the person) | a program day is saved as completed (a draft is not announced); one per person and calendar day, and the message names the latest day |
 
 A member's entries reach the coordinators and the admin; a coordinator's reach the other coordinators and the admin. Other members are never told. Everyone above can also read the entries (`daily`, `day-status`, `timesheet` with `user_id`); a member asking for someone else's gets 403.
 
