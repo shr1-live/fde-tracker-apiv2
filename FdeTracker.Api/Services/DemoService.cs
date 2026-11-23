@@ -27,10 +27,12 @@ public sealed class DemoService(Db db)
     public static bool IsDemoEmail(string email) => email.EndsWith("@" + Domain, StringComparison.OrdinalIgnoreCase);
 
     sealed record Who(string Key, string Name);
+    // The keys are only internal handles (and the demo email); the names are what people see. The feed is posted by the Shivanshu accounts,
+    // with a few other names in between.
     static readonly Who[] People =
     [
-        new("priya", "Priya Sharma"), new("rahul", "Rahul Mehta"), new("asha", "Asha Verma"), new("karan", "Karan Singh"),
-        new("neha", "Neha Gupta"), new("arjun", "Arjun Nair"), new("meera", "Meera Jain"), new("vikram", "Vikram Rao"),
+        new("priya", "Shivanshu Admin"), new("rahul", "Shivanshu Coordinator"), new("asha", "Shivanshu 1"), new("karan", "Shivanshu 2"),
+        new("neha", "Shivanshu 3"), new("arjun", "Ananya Iyer"), new("meera", "Divya Menon"), new("vikram", "Rohan Desai"),
     ];
 
     static string Iso(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -126,8 +128,8 @@ public sealed class DemoService(Db db)
         if (await s.Scalar<int>("select count(*)::int from lp_programs where is_demo") > 0) throw new ApiException(409, "Demo data is already loaded. Remove it first to load it again.");
         var today = todayOverride ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
-        var start = monday.AddDays(-14);       // FDE demo: in its third week
-        var devStart = monday.AddDays(-7);     // DevOps demo: in its second week
+        var start = monday.AddDays(-7);        // FDE demo: week 1 was last week (complete sample data), week 2 is this week
+        var devStart = monday.AddDays(-7);     // DevOps demo: started last week too
         var yesterday = today.AddDays(-1);
         while (Weekend(yesterday)) yesterday = yesterday.AddDays(-1);
 
@@ -165,7 +167,7 @@ public sealed class DemoService(Db db)
             insert into lp_days (program_id, week, day, topic, topics_to_cover, practical_task, resources)
             select @fde, week, day, topic, topics_to_cover, practical_task, resources from lp_days where program_id = @rp
             """, new { fde, rp }) : 0;
-        if (copied == 0) await Days(s, fde, FdePlan);
+        if (copied < FdePlan.Length) { await s.Exec("delete from lp_days where program_id = @fde", new { fde }); await Days(s, fde, FdePlan); } // weeks 1 and 2 must both be there
         await Days(s, dev, DevPlan);
 
         // ---- who is where: a coordinator per program, one person in both, a coordinator who is a member elsewhere
@@ -181,10 +183,12 @@ public sealed class DemoService(Db db)
         var fields = await s.Query<FieldRow>("select form, key, type from lp_form_fields where program_id = @fde", new { fde });
         string Values(string form, int i, bool full = true) => JsonSerializer.Serialize(fields.Where(f => f.Form == form).ToDictionary(f => f.Key, f => (object)(f.Type switch
         {
-            "rating" => 3 + i % 3,
+            "rating" => form == "day" && i < Week1Sample.Days.Length ? Week1Sample.Days[i].Rate ?? 3 : 3 + i % 3,
             "number" => 2 + i % 3,
             "url" => "https://github.com/fiftyfive-demo/fde-practicals",
-            _ => form == "day"
+            _ => form == "day" && i < Week1Sample.Days.Length
+                ? (f.Key.Contains("proof") ? Week1Sample.Days[i].Proof : Week1Sample.Days[i].Learned)
+                : form == "day"
                 ? (f.Key.Contains("proof") ? $"https://github.com/fiftyfive-demo/fde-practicals/tree/main/day-{i + 1}" : full ? DayNotes[i % DayNotes.Length] : "Halfway through the practical.")
                 : f.Key.Contains("project") ? Projects[i % Projects.Length] : f.Key.Contains("theory") ? $"Day {i + 1} topics covered, about 3 h" : "Practical task in progress; pushed the first version.",
         })));
@@ -199,9 +203,9 @@ public sealed class DemoService(Db db)
                     values (@pid, @u, @d, @v::jsonb, @c, case when @c then now() end)
                     """, new { pid, u = ids[k], d = days[i].Id, v = Values("day", i, i < done), c = i < done });
         }
-        await Progress(fde, "asha", 11, 0); await Progress(fde, "karan", 8, 1); await Progress(fde, "neha", 5, 2);
-        await Progress(fde, "rahul", 6, 0); await Progress(fde, "meera", 2, 1); await Progress(fde, "vikram", 3, 0);
-        await Progress(dev, "arjun", 5, 0); await Progress(dev, "karan", 3, 1);
+        await Progress(fde, "asha", 4, 1); await Progress(fde, "karan", 4, 1); await Progress(fde, "neha", 3, 2);   // week 1: days 1-4 done, day 5 (the end-to-end app) open
+        await Progress(fde, "rahul", 4, 1); await Progress(fde, "vikram", 3, 1); await Progress(fde, "arjun", 2, 0);
+        await Progress(dev, "arjun", 3, 0); await Progress(dev, "karan", 2, 1);
 
         // ---- daily log (timesheet) + the old daily form for the first week
         async Task Log(Guid pid, string k, DateOnly from, Func<DateOnly, bool> skip, (string Title, double[] Hours)[] tasks, bool submitPast)
@@ -232,7 +236,7 @@ public sealed class DemoService(Db db)
         await Log(fde, "asha", start, _ => false, fdeTasks, true);                                         // always on time
         await Log(fde, "karan", start, d => d == yesterday, fdeTasks[..2], true);                          // missed FDE yesterday...
         await Log(dev, "karan", devStart, _ => false, [("DevOps labs", [1.5, 2, 1.5, 2, 1])], true);       // ...but logged DevOps
-        await Log(fde, "neha", start, d => d >= monday.AddDays(2) && d <= monday.AddDays(3) || d == start.AddDays(11), fdeTasks[..2], false); // gaps, never submits
+        await Log(fde, "neha", start, d => d >= monday.AddDays(2) && d <= monday.AddDays(3) || d == start.AddDays(2), fdeTasks[..2], false); // gaps, never submits
         await Log(fde, "rahul", start, _ => false, [("Training theory", [2, 2, 1.5, 2, 2])], true);
         await Log(fde, "meera", monday.AddDays(2), _ => false, [("Onboarding and setup", [4, 3.5, 3]), ("Training theory", [2, 3, 3])], false);
         await Log(dev, "arjun", devStart, _ => false, [("Training theory", [3, 3, 2.5, 3, 3]), ("Lab: pipelines", [3, 2.5, 3, 3, 2])], true);
@@ -246,13 +250,13 @@ public sealed class DemoService(Db db)
                 new { u = ids[k], pid, body, url, daysAgo, h = daysAgo * 3 % 9 });
         var posts = new List<(Guid Id, Guid Program)>
         {
-            (await Post(fde, "priya", "Welcome to the FDE program! Post anything useful you find, and your demos. Demo day is on Friday.", null, 13), fde),
+            (await Post(fde, "priya", "Welcome to the FDE program! Week 1 is done: LLM fundamentals to the end-to-end app. Post anything useful you find, and your demos.", null, 13), fde),
             (await Post(fde, "asha", "This talk on building effective agents made tool calling click for me.", "https://www.youtube.com/watch?v=D7_ipDqhtwk", 9), fde),
             (await Post(fde, "karan", "How I cut our RAG bot's token cost by 40% with smaller chunks and caching.", "https://www.anthropic.com/news/contextual-retrieval", 5), fde),
             (await Post(fde, "neha", "Anyone else stuck on schema validation retries? Validate, then retry once with the error in the prompt. Works for me.", null, 3), fde),
-            (await Post(fde, "meera", "First week here! Thanks for the onboarding notes, Priya.", null, 1), fde),
+            (await Post(fde, "rahul", "Week 2 starts with RAG: ingestion, chunking, embeddings, then retrieval. Read the topics for Day 1 before you start.", null, 1), fde),
             (await Post(dev, "rahul", "Reminder: the incident drill is next Thursday. Read the runbook first.", "https://sre.google/sre-book/managing-incidents/", 6), dev),
-            (await Post(dev, "arjun", "Got our image from 1.1 GB to 180 MB with a multi-stage build.", "https://docs.docker.com/build/building/multi-stage/", 2), dev),
+            (await Post(dev, "karan", "Got our image from 1.1 GB to 180 MB with a multi-stage build.", "https://docs.docker.com/build/building/multi-stage/", 2), dev),
         };
         var fans = new[] { "asha", "karan", "neha", "rahul", "meera", "priya", "vikram" };
         for (var i = 0; i < posts.Count; i++)
@@ -261,8 +265,8 @@ public sealed class DemoService(Db db)
         async Task Comment(int post, string k, string body) => await s.Exec("insert into feed_comments (post_id, author_id, body) values (@p, @u, @body)", new { p = posts[post].Id, u = ids[k], body });
         await Comment(2, "priya", "Great write-up. Can you show it at demo day?");
         await Comment(2, "karan", "Sure, I will add the before/after numbers.");
-        await Comment(3, "asha", "Same pattern here, and log the failures so the evals catch them.");
-        await Comment(4, "priya", "Welcome, Meera! Ping me with any questions.");
+        await Comment(3, "arjun", "Same pattern here, and log the failures so the evals catch them.");
+        await Comment(4, "meera", "Thanks, I will read it tonight.");
         await Comment(6, "rahul", "Nice. Add it to the team wiki?");
 
         // ---- people from the training sheets: real names and their real status, in the demo FDE program only
